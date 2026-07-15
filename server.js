@@ -4089,6 +4089,112 @@ function handleEvents(req, res, url) {
   });
 }
 
+const GLOBAL_LOADING_SNIPPET = `
+<style id="vovinam-global-loading-style">
+  #vovinamGlobalLoading {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 99999;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid rgba(56, 189, 248, 0.65);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.94);
+    color: #f8fafc;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
+    font: 800 14px/1 Arial, sans-serif;
+  }
+
+  #vovinamGlobalLoading::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    border: 3px solid rgba(148, 163, 184, 0.45);
+    border-top-color: #38bdf8;
+    border-radius: 999px;
+    animation: vovinamSpin 0.8s linear infinite;
+  }
+
+  html.vovinam-loading #vovinamGlobalLoading {
+    display: inline-flex;
+  }
+
+  html.vovinam-loading,
+  html.vovinam-loading button,
+  html.vovinam-loading a,
+  html.vovinam-loading input,
+  html.vovinam-loading select {
+    cursor: progress;
+  }
+
+  @keyframes vovinamSpin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 640px) {
+    #vovinamGlobalLoading {
+      top: 10px;
+      right: 10px;
+      left: 10px;
+      justify-content: center;
+    }
+  }
+</style>
+<div id="vovinamGlobalLoading" role="status" aria-live="polite">Đang xử lý...</div>
+<script id="vovinam-global-loading-script">
+  (() => {
+    if (window.__vovinamGlobalLoadingInstalled || !window.fetch) return;
+    window.__vovinamGlobalLoadingInstalled = true;
+
+    const root = document.documentElement;
+    const originalFetch = window.fetch.bind(window);
+    let pending = 0;
+    let showTimer = null;
+
+    function renderLoading() {
+      if (pending > 0) {
+        if (!showTimer) {
+          showTimer = window.setTimeout(() => {
+            root.classList.add('vovinam-loading');
+          }, 120);
+        }
+        return;
+      }
+
+      if (showTimer) {
+        window.clearTimeout(showTimer);
+        showTimer = null;
+      }
+      root.classList.remove('vovinam-loading');
+    }
+
+    window.fetch = async (...args) => {
+      pending += 1;
+      renderLoading();
+      try {
+        return await originalFetch(...args);
+      } finally {
+        pending = Math.max(0, pending - 1);
+        renderLoading();
+      }
+    };
+  })();
+</script>
+`;
+
+function injectGlobalLoading(content) {
+  const html = content.toString('utf8');
+  if (html.includes('id="vovinam-global-loading-script"')) return html;
+  if (html.includes('</body>')) {
+    return html.replace('</body>', `${GLOBAL_LOADING_SNIPPET}</body>`);
+  }
+  return `${html}${GLOBAL_LOADING_SNIPPET}`;
+}
+
 function serveStatic(res, pathname) {
   const fileMap = {
     '/': 'index.html',
@@ -4127,7 +4233,7 @@ function serveStatic(res, pathname) {
     }
 
     res.writeHead(200, { 'Content-Type': contentType });
-    res.end(content);
+    res.end(ext === '.html' ? injectGlobalLoading(content) : content);
   });
 
   return true;
