@@ -99,6 +99,13 @@
         font-weight: 1000;
         line-height: 1.1;
       }
+      .current-members {
+        margin-top: 8px;
+        color: #c4b5fd;
+        font-size: 15px;
+        font-weight: 800;
+        line-height: 1.4;
+      }
       .current-meta {
         margin-top: 8px;
         color: #cbd5e1;
@@ -135,6 +142,7 @@
         <div class="current-box">
           <div class="current-title" id="currentLabel">CHƯA CÓ DỮ LIỆU</div>
           <div class="current-name" id="currentName">Đang tự tìm danh sách</div>
+          <div class="current-members" id="currentMembers" hidden></div>
           <div class="current-meta" id="currentMeta">Khi đủ 5 điểm và công bố kết quả, chỉ cần bấm Next để sang lượt tiếp theo.</div>
         </div>
       </section>
@@ -154,6 +162,7 @@
       const nextButton = document.getElementById('nextButton');
       const currentLabel = document.getElementById('currentLabel');
       const currentName = document.getElementById('currentName');
+      const currentMembers = document.getElementById('currentMembers');
       const currentMeta = document.getElementById('currentMeta');
 
       document.getElementById('courtTitle').textContent = `Sân hội diễn ${court}`;
@@ -174,6 +183,8 @@
         if (!display || !display.hasSchedule) {
           currentLabel.textContent = 'CHƯA CÓ DỮ LIỆU';
           currentName.textContent = 'Sân này chưa được phân nội dung';
+          currentMembers.textContent = '';
+          currentMembers.hidden = true;
           currentMeta.textContent = 'Hãy vào màn Chia sân hội diễn ở dashboard để gán nội dung cho sân này.';
           nextButton.disabled = true;
           return;
@@ -182,6 +193,11 @@
         const current = display.currentEntry;
         currentLabel.textContent = String(display.currentLabel || 'CHƯA CÓ DỮ LIỆU').toUpperCase();
         currentName.textContent = current?.displayName || display.title || 'Danh sách hội diễn';
+        const memberSummary = current && Number(current.participantCount || 1) > 1
+          ? (current.memberSummary || (current.memberNames || []).join(', '))
+          : '';
+        currentMembers.textContent = memberSummary ? `Thành viên: ${memberSummary}` : '';
+        currentMembers.hidden = !memberSummary;
         currentMeta.textContent = current
           ? `${current.unit || '--'} • ${current.routineName || '--'} • ${display.nextReason || ''}`
           : ((display.currentMeta || 'Chưa có mục đang hiển thị') + (display.nextReason ? ` • ${display.nextReason}` : ''));

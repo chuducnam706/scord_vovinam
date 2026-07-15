@@ -201,6 +201,12 @@
         font-weight: 1000;
         line-height: 1.05;
       }
+      .entry-members {
+        color: #c4b5fd;
+        font-size: clamp(15px, 2vw, 22px);
+        font-weight: 800;
+        line-height: 1.4;
+      }
       .entry-meta {
         color: #cbd5e1;
         font-size: clamp(18px, 2.1vw, 26px);
@@ -256,6 +262,7 @@
         <div class="schedule-card">
           <div class="entry-state" id="entryState">Chưa có dữ liệu</div>
           <div class="entry-name" id="entryName">Đang tự tìm danh sách</div>
+          <div class="entry-members" id="entryMembers" hidden></div>
           <div class="entry-meta" id="entryUnit">Đơn vị: --</div>
           <div class="entry-meta" id="entryRoutine">Bài thi: --</div>
           <div class="entry-submeta" id="entryMeta">Nội dung của sân này được gán ở màn Chia sân hội diễn. Khi đủ điểm thì TT tổng bấm Next ở màn điều khiển.</div>
@@ -274,6 +281,7 @@
       const resetButton = document.getElementById('resetButton');
       const entryState = document.getElementById('entryState');
       const entryName = document.getElementById('entryName');
+      const entryMembers = document.getElementById('entryMembers');
       const entryUnit = document.getElementById('entryUnit');
       const entryRoutine = document.getElementById('entryRoutine');
       const entryMeta = document.getElementById('entryMeta');
@@ -287,10 +295,12 @@
         return Number.isFinite(Number(value)) ? Number(value).toFixed(scoreDecimals) : '--';
       }
 
-      function updateEntryInfo(label, status, name, unit, routine, meta) {
+      function updateEntryInfo(label, status, name, unit, routine, meta, memberSummary = '') {
         entryState.textContent = label;
         entryState.className = `entry-state ${status}`.trim();
         entryName.textContent = name;
+        entryMembers.textContent = memberSummary ? `Thành viên: ${memberSummary}` : '';
+        entryMembers.hidden = !memberSummary;
         entryUnit.textContent = `Đơn vị: ${unit || '--'}`;
         entryRoutine.textContent = `Bài thi: ${routine || '--'}`;
         entryMeta.textContent = meta;
@@ -328,6 +338,9 @@
           display.currentEntry.unit || '--',
           display.currentEntry.routineName || display.schedule?.routineName || '--',
           display.currentMeta,
+          Number(display.currentEntry.participantCount || 1) > 1
+            ? (display.currentEntry.memberSummary || (display.currentEntry.memberNames || []).join(', '))
+            : '',
         );
       }
 

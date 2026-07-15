@@ -29,29 +29,31 @@ const performanceConfig = {
 };
 
 const performanceRoutineCatalog = [
-  { id: 'don_luyen_tay_khong', name: 'Đơn Luyện Tay Không', aliases: ['don luyen tay khong'] },
-  { id: 'don_luyen_binh_khi', name: 'Đơn Luyện Binh Khí', aliases: ['don luyen binh khi'] },
-  { id: 'song_luyen', name: 'Song Luyện', aliases: ['song luyen'] },
-  { id: 'da_luyen', name: 'Đa Luyện', aliases: ['da luyen'] },
-  { id: 'quyen_dong_doi', name: 'Quyền Đồng Đội', aliases: ['quyen dong doi'] },
-  { id: 'long_ho_quyen', name: 'Long Hổ Quyền', aliases: ['long ho quyen'] },
-  { id: 'ngu_mon_quyen', name: 'Ngũ Môn Quyền', aliases: ['ngu mon quyen'] },
-  { id: 'thap_tu_quyen', name: 'Thập Tự Quyền', aliases: ['thap tu quyen'] },
-  { id: 'tu_tru_quyen', name: 'Tứ Trụ Quyền', aliases: ['tu tru quyen'] },
-  { id: 'ngu_tan_quyen', name: 'Ngũ Tấn Quyền', aliases: ['ngu tan quyen'] },
-  { id: 'tinh_hoa_luong_nghi_kiem_phap', name: 'Tinh Hoa Lưỡng Nghi Kiếm Pháp', aliases: ['tinh hoa luong nghi kiem phap'] },
-  { id: 'song_luyen_1', name: 'Song Luyện 1', aliases: ['song luyen 1'] },
-  { id: 'song_luyen_2', name: 'Song Luyện 2', aliases: ['song luyen 2'] },
-  { id: 'song_luyen_3', name: 'Song Luyện 3', aliases: ['song luyen 3'] },
-  { id: 'song_luyen_4', name: 'Song Luyện 4', aliases: ['song luyen 4'] },
-  { id: 'song_luyen_5', name: 'Song Luyện 5', aliases: ['song luyen 5'] },
-  { id: 'song_dao_phap', name: 'Song Đao Pháp', aliases: ['song dao phap'] },
-  { id: 'song_kiem_phap', name: 'Song Kiếm Pháp', aliases: ['song kiem phap'] },
-  { id: 'da_luyen_vo_khi', name: 'Đa Luyện Vũ Khí', aliases: ['da luyen vu khi', 'da luyen'] },
-  { id: 'tu_ve_nam', name: 'Tự Vệ Nam', aliases: ['tu ve nam'] },
-  { id: 'tu_ve_nu', name: 'Tự Vệ Nữ', aliases: ['tu ve nu'] },
-  { id: 'don_chan_tan_cong', name: 'Đòn Chân Tấn Công', aliases: ['don chan tan cong'] },
+  { id: 'don_luyen_tay_khong', name: 'Đơn Luyện Tay Không', aliases: ['don luyen tay khong'], memberCount: 1 },
+  { id: 'don_luyen_binh_khi', name: 'Đơn Luyện Binh Khí', aliases: ['don luyen binh khi'], memberCount: 1 },
+  { id: 'song_luyen', name: 'Song Luyện', aliases: ['song luyen'], memberCount: 2 },
+  { id: 'da_luyen', name: 'Đa Luyện', aliases: ['da luyen'], memberCount: 4 },
+  { id: 'quyen_dong_doi', name: 'Quyền Đồng Đội', aliases: ['quyen dong doi'], memberCount: 3 },
+  { id: 'long_ho_quyen', name: 'Long Hổ Quyền', aliases: ['long ho quyen'], memberCount: 1 },
+  { id: 'ngu_mon_quyen', name: 'Ngũ Môn Quyền', aliases: ['ngu mon quyen'], memberCount: 1 },
+  { id: 'thap_tu_quyen', name: 'Thập Tự Quyền', aliases: ['thap tu quyen'], memberCount: 1 },
+  { id: 'tu_tru_quyen', name: 'Tứ Trụ Quyền', aliases: ['tu tru quyen'], memberCount: 1 },
+  { id: 'ngu_tan_quyen', name: 'Ngũ Tấn Quyền', aliases: ['ngu tan quyen'], memberCount: 1 },
+  { id: 'tinh_hoa_luong_nghi_kiem_phap', name: 'Tinh Hoa Lưỡng Nghi Kiếm Pháp', aliases: ['tinh hoa luong nghi kiem phap'], memberCount: 1 },
+  { id: 'song_luyen_1', name: 'Song Luyện 1', aliases: ['song luyen 1'], memberCount: 2 },
+  { id: 'song_luyen_2', name: 'Song Luyện 2', aliases: ['song luyen 2'], memberCount: 2 },
+  { id: 'song_luyen_3', name: 'Song Luyện 3', aliases: ['song luyen 3'], memberCount: 2 },
+  { id: 'song_luyen_4', name: 'Song Luyện 4', aliases: ['song luyen 4'], memberCount: 2 },
+  { id: 'song_luyen_5', name: 'Song Luyện 5', aliases: ['song luyen 5'], memberCount: 2 },
+  { id: 'song_dao_phap', name: 'Song Đao Pháp', aliases: ['song dao phap'], memberCount: 2 },
+  { id: 'song_kiem_phap', name: 'Song Kiếm Pháp', aliases: ['song kiem phap'], memberCount: 2 },
+  { id: 'da_luyen_vo_khi', name: 'Đa Luyện Vũ Khí', aliases: ['da luyen vu khi', 'da luyen'], memberCount: 4 },
+  { id: 'tu_ve_nam', name: 'Tự Vệ Nam', aliases: ['tu ve nam'], memberCount: 4 },
+  { id: 'tu_ve_nu', name: 'Tự Vệ Nữ', aliases: ['tu ve nu'], memberCount: 4 },
+  { id: 'don_chan_tan_cong', name: 'Đòn Chân Tấn Công', aliases: ['don chan tan cong'], memberCount: 4 },
 ];
+
+const MAX_PERFORMANCE_MEMBER_COUNT = 50;
 
 const COURT_COUNT = 6;
 const modeLabels = {
@@ -635,6 +637,11 @@ function normalizeMcQueueStatus(status) {
 }
 
 function normalizeMcQueueItem(item, index = 0) {
+  const memberNames = (Array.isArray(item?.memberNames) ? item.memberNames : [])
+    .map((name) => String(name || '').trim().slice(0, 240))
+    .filter(Boolean)
+    .slice(0, MAX_PERFORMANCE_MEMBER_COUNT);
+
   return {
     itemId: String(item?.itemId || newId(`mc_item_${index + 1}`)).trim(),
     sourceEntryId: String(item?.sourceEntryId || '').trim(),
@@ -642,6 +649,11 @@ function normalizeMcQueueItem(item, index = 0) {
     unit: String(item?.unit || '').trim().slice(0, 240),
     ageGroup: String(item?.ageGroup || '').trim().slice(0, 120),
     routineName: String(item?.routineName || '').trim().slice(0, 240),
+    memberNames,
+    memberSummary: memberNames.join(', '),
+    participantCount: Number.isInteger(Number(item?.participantCount))
+      ? Math.max(0, Number(item.participantCount))
+      : memberNames.length,
     order: Number.isInteger(Number(item?.order)) ? Number(item.order) : index + 1,
     status: normalizeMcQueueStatus(item?.status),
     calledAt: item?.calledAt || null,
@@ -836,6 +848,8 @@ function buildMcQueueFromPerformanceSchedule(group) {
     unit: entry.unit,
     ageGroup: entry.ageGroup,
     routineName: entry.routineName,
+    memberNames: entry.memberNames,
+    participantCount: entry.participantCount,
     order: index + 1,
     status: 'pending',
   }, index));
@@ -867,6 +881,9 @@ function publicMcQueueItem(item, index = 0) {
     unit: item.unit,
     ageGroup: item.ageGroup,
     routineName: item.routineName,
+    memberNames: item.memberNames,
+    memberSummary: item.memberSummary,
+    participantCount: item.participantCount,
     order: Number.isInteger(Number(item.order)) ? Number(item.order) : index + 1,
     status: item.status,
     calledAt: item.calledAt,
@@ -1295,6 +1312,22 @@ function parseRoutineSelectionId(value) {
   };
 }
 
+function parsePerformanceMemberCount(value) {
+  const match = String(value ?? '').match(/\d+/);
+  if (!match) return null;
+  const memberCount = Number(match[0]);
+  if (!Number.isInteger(memberCount) || memberCount < 1 || memberCount > MAX_PERFORMANCE_MEMBER_COUNT) {
+    return null;
+  }
+  return memberCount;
+}
+
+function normalizePerformanceMemberCount(value, fallback = 1) {
+  return parsePerformanceMemberCount(value)
+    || parsePerformanceMemberCount(fallback)
+    || 1;
+}
+
 function normalizePerformanceRoutineItem(item, index = 0) {
   const name = String(item?.name || '').trim().slice(0, 240);
   if (!name) return null;
@@ -1307,6 +1340,10 @@ function normalizePerformanceRoutineItem(item, index = 0) {
     id: String(item?.id || `routine_${slugifyText(name)}_${index + 1}`),
     name,
     aliases,
+    memberCount: normalizePerformanceMemberCount(
+      item?.memberCount,
+      matchPerformanceRoutine(name)?.memberCount || 1,
+    ),
   };
 }
 
@@ -1340,8 +1377,8 @@ function publicPerformanceRoutineBatch(batch, includeRoutines = false) {
     previewRoutines: batch.routines.slice(0, 10).map(publicPerformanceRoutine),
     ...(includeRoutines ? {
       routines: batch.routines.map((item) => ({
+        ...publicPerformanceRoutine(item),
         id: makeImportedRoutineSelectionId(batch.batchId, item.id),
-        name: item.name,
       })),
     } : {}),
   };
@@ -1441,35 +1478,51 @@ function deletePerformanceRoutineBatch(batchId) {
 
 function normalizeImportedPerformanceRoutines(result) {
   const routineColumnAliases = [...performancePlannerAliases.routine, 'ten bai quyen', 'ten bai'];
+  const memberCountAliases = [
+    ...performancePlannerAliases.memberCount,
+    'member count',
+    'group size',
+    'team size',
+  ];
   const routineIndex = findColumnIndexByAliases(result.columns || [], routineColumnAliases);
   const index = routineIndex >= 0 ? routineIndex : 0;
+  const memberCountIndex = findColumnIndexByAliases(result.columns || [], memberCountAliases);
   const routineMap = new Map();
-  const values = [];
+  const records = [];
   const headerValue = String(result.columns?.[index] || '').trim();
   const normalizedHeaderValue = normalizeText(headerValue);
   const isHeaderLike = routineColumnAliases.some((alias) => normalizedHeaderValue.includes(alias));
 
   if (headerValue && !isHeaderLike) {
-    values.push(headerValue);
+    records.push({ name: headerValue, memberCount: null });
   }
 
   (result.rows || []).forEach((row) => {
-    const rawValue = String(row?.[index] || '').trim();
-    if (rawValue) values.push(rawValue);
+    const name = String(row?.[index] || '').trim();
+    if (!name) return;
+    records.push({
+      name,
+      memberCount: memberCountIndex >= 0 ? row?.[memberCountIndex] : null,
+    });
   });
 
-  values.forEach((rawValue) => {
-    rawValue
+  records.forEach((record) => {
+    record.name
       .split(/[;\n\r]+/)
       .map((item) => item.trim())
       .filter(Boolean)
       .forEach((name) => {
         const key = slugifyText(name);
         if (!routineMap.has(key)) {
+          const catalogRoutine = matchPerformanceRoutine(name);
           routineMap.set(key, {
             id: key,
             name,
             aliases: [],
+            memberCount: normalizePerformanceMemberCount(
+              record.memberCount,
+              catalogRoutine?.memberCount || 1,
+            ),
           });
         }
       });
@@ -1508,12 +1561,14 @@ const performancePlannerAliases = {
   routine: ['bai quyen', 'bai thi', 'noi dung', 'noi dung thi', 'bai bieu dien', 'ten bai'],
   name: ['ho ten', 'ten vdv', 'van dong vien', 'ten doi', 'doi thi', 'athlete', 'ho va ten'],
   unit: ['don vi', 'clb', 'cau lac bo', 'team', 'unit'],
+  memberCount: ['so nguoi', 'so vdv', 'so thanh vien', 'nguoi moi doi', 'so luong'],
 };
 
 function publicPerformanceRoutine(routine) {
   return {
     id: routine.id,
     name: routine.name,
+    memberCount: normalizePerformanceMemberCount(routine.memberCount, 1),
   };
 }
 
@@ -1530,6 +1585,7 @@ function detectPerformancePlannerColumns(columns) {
     routine: findColumnIndexByAliases(columns, performancePlannerAliases.routine),
     name: findColumnIndexByAliases(columns, performancePlannerAliases.name),
     unit: findColumnIndexByAliases(columns, performancePlannerAliases.unit),
+    memberCount: findColumnIndexByAliases(columns, performancePlannerAliases.memberCount),
   };
 }
 
@@ -1548,18 +1604,37 @@ function getUniqueColumnValues(rows, columnIndex) {
   )).sort((a, b) => a.localeCompare(b, 'vi', { numeric: true, sensitivity: 'base' }));
 }
 
-function matchPerformanceRoutine(value) {
+function findBestRoutineMatch(value, routines) {
   const normalizedValue = normalizeText(value);
   if (!normalizedValue) return null;
 
-  return performanceRoutineCatalog.find((routine) => {
-    const names = [routine.name, ...(routine.aliases || [])].map((item) => normalizeText(item));
-    return names.some((item) => (
-      item === normalizedValue
-      || normalizedValue.includes(item)
-      || item.includes(normalizedValue)
-    ));
-  }) || null;
+  const matches = (routines || []).flatMap((routine, routineIndex) => (
+    [routine.name, ...(routine.aliases || [])]
+      .map((item) => normalizeText(item))
+      .filter(Boolean)
+      .map((name) => ({
+        routine,
+        routineIndex,
+        name,
+        exact: name === normalizedValue,
+        matches: name === normalizedValue
+          || normalizedValue.includes(name)
+          || name.includes(normalizedValue),
+      }))
+      .filter((candidate) => candidate.matches)
+  ));
+
+  matches.sort((a, b) => {
+    if (a.exact !== b.exact) return a.exact ? -1 : 1;
+    if (a.name.length !== b.name.length) return b.name.length - a.name.length;
+    return a.routineIndex - b.routineIndex;
+  });
+
+  return matches[0]?.routine || null;
+}
+
+function matchPerformanceRoutine(value) {
+  return findBestRoutineMatch(value, performanceRoutineCatalog);
 }
 
 function matchedPerformanceRoutinesForValue(value) {
@@ -1572,17 +1647,7 @@ function matchedPerformanceRoutinesForValue(value) {
 }
 
 function matchRoutineFromList(value, routines) {
-  const normalizedValue = normalizeText(value);
-  if (!normalizedValue) return null;
-
-  return (routines || []).find((routine) => {
-    const names = [routine.name, ...(routine.aliases || [])].map((item) => normalizeText(item));
-    return names.some((item) => (
-      item === normalizedValue
-      || normalizedValue.includes(item)
-      || item.includes(normalizedValue)
-    ));
-  }) || null;
+  return findBestRoutineMatch(value, routines);
 }
 
 function matchedRoutinesForValue(value, routines) {
@@ -1639,8 +1704,12 @@ function buildPerformancePlannerOptions(batch) {
     }
 
     matchedRoutines.forEach((matchedRoutine) => {
+      const rowMemberCount = parsePerformanceMemberCount(getRowCell(row, indexes.memberCount));
       if (!routineMap.has(matchedRoutine.id)) {
-        routineMap.set(matchedRoutine.id, matchedRoutine);
+        routineMap.set(matchedRoutine.id, {
+          ...matchedRoutine,
+          memberCount: rowMemberCount || matchedRoutine.memberCount || 1,
+        });
       }
     });
   });
@@ -1673,6 +1742,7 @@ function publicPerformancePlannerOptions(batch) {
       routine: publicPlannerColumn(batch.columns, options.indexes.routine),
       name: publicPlannerColumn(batch.columns, options.indexes.name),
       unit: publicPlannerColumn(batch.columns, options.indexes.unit),
+      memberCount: publicPlannerColumn(batch.columns, options.indexes.memberCount),
     },
     ageOptions: options.ageOptions,
     routineOptions: options.routineOptions,
@@ -1684,15 +1754,44 @@ function normalizePerformanceScheduleEntry(entry, index = 0) {
   const status = ['pending', 'in_progress', 'completed'].includes(entry?.status)
     ? entry.status
     : 'pending';
+  const displayName = String(entry?.displayName || '').trim().slice(0, 240);
+  const memberNames = (Array.isArray(entry?.memberNames) ? entry.memberNames : [])
+    .map((name) => String(name || '').trim().slice(0, 240))
+    .filter(Boolean)
+    .slice(0, MAX_PERFORMANCE_MEMBER_COUNT);
+  if (!memberNames.length && displayName) memberNames.push(displayName);
+  const expectedMemberCount = normalizePerformanceMemberCount(
+    entry?.expectedMemberCount,
+    memberNames.length || 1,
+  );
+  const participantCount = memberNames.length;
+  const sourceRowIndexes = (Array.isArray(entry?.sourceRowIndexes)
+    ? entry.sourceRowIndexes
+    : [entry?.sourceRowIndex])
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value >= 0)
+    .slice(0, MAX_PERFORMANCE_MEMBER_COUNT);
 
   return {
     entryId: String(entry?.entryId || newId(`performance_entry_${index + 1}`)),
-    displayName: String(entry?.displayName || '').trim().slice(0, 240),
+    displayName,
     unit: String(entry?.unit || '').trim().slice(0, 240),
     ageGroup: String(entry?.ageGroup || '').trim().slice(0, 120),
     routineName: String(entry?.routineName || '').trim().slice(0, 240),
     sourceRowIndex: Number.isInteger(Number(entry?.sourceRowIndex)) ? Number(entry.sourceRowIndex) : index,
+    sourceRowIndexes,
     originalOrder: Number.isInteger(Number(entry?.originalOrder)) ? Number(entry.originalOrder) : index + 1,
+    memberNames,
+    memberSummary: memberNames.join(', '),
+    participantCount,
+    expectedMemberCount,
+    groupNumber: Number.isInteger(Number(entry?.groupNumber)) ? Math.max(1, Number(entry.groupNumber)) : 1,
+    groupCountForUnit: Number.isInteger(Number(entry?.groupCountForUnit))
+      ? Math.max(1, Number(entry.groupCountForUnit))
+      : 1,
+    autoGroupKey: String(entry?.autoGroupKey || '').trim().slice(0, 300),
+    needsAttention: Boolean(entry?.needsAttention) || participantCount !== expectedMemberCount,
+    attentionReason: String(entry?.attentionReason || '').trim().slice(0, 300),
     status,
     startedAt: entry?.startedAt || null,
     completedAt: entry?.completedAt || null,
@@ -1718,6 +1817,11 @@ function normalizePerformanceScheduleGroup(group) {
 }
 
 function publicPerformanceScheduleGroup(group, includeEntries = false) {
+  const memberCount = group.entries.length
+    ? normalizePerformanceMemberCount(group.entries[0]?.expectedMemberCount, 1)
+    : 1;
+  const autoGrouped = group.entries.length > 0 && group.entries.every((entry) => entry.autoGroupKey);
+
   return {
     groupId: group.groupId,
     batchId: group.batchId,
@@ -1725,6 +1829,9 @@ function publicPerformanceScheduleGroup(group, includeEntries = false) {
     routineId: group.routineId,
     routineName: group.routineName,
     totalEntries: group.totalEntries,
+    totalAthletes: group.entries.reduce((total, entry) => total + Number(entry.participantCount || 0), 0),
+    memberCount,
+    autoGrouped,
     createdAt: group.createdAt,
     updatedAt: group.updatedAt,
     previewEntries: group.entries.slice(0, 5),
@@ -2386,6 +2493,20 @@ function savePerformanceScheduleGroup(payload) {
     return { statusCode: 400, payload: { error: 'entries must be a non-empty array' } };
   }
 
+  const normalizedEntries = payload.entries.map((entry, index) => normalizePerformanceScheduleEntry(entry, index));
+  const invalidEntry = normalizedEntries.find((entry) => (
+    entry.needsAttention || entry.participantCount !== entry.expectedMemberCount
+  ));
+  if (invalidEntry) {
+    return {
+      statusCode: 400,
+      payload: {
+        error: invalidEntry.attentionReason
+          || `Đội "${invalidEntry.displayName}" chưa đủ ${invalidEntry.expectedMemberCount} VĐV.`,
+      },
+    };
+  }
+
   const existing = getPerformanceScheduleGroupByKey(batchId, ageGroup, routineId);
   const group = persistPerformanceScheduleGroup({
     groupId: existing?.groupId || newId('performance_schedule'),
@@ -2393,7 +2514,7 @@ function savePerformanceScheduleGroup(payload) {
     ageGroup,
     routineId,
     routineName: routineSelection.routine.name,
-    entries: payload.entries,
+    entries: normalizedEntries,
     createdAt: existing?.createdAt || nowIso(),
     updatedAt: nowIso(),
   });
@@ -2788,7 +2909,7 @@ function advancePerformanceScheduleForCourt(court) {
   };
 }
 
-function buildPerformancePlannerEntries(batch, ageGroup, routineId) {
+function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMemberCount = null) {
   const options = buildPerformancePlannerOptions(batch);
   if (options.indexes.age < 0) return { error: 'Không nhận diện được cột Lứa tuổi trong batch import.' };
   if (options.indexes.routine < 0) return { error: 'Không nhận diện được cột Bài quyền/Nội dung thi trong batch import.' };
@@ -2799,8 +2920,16 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId) {
   const targetRoutineId = parsedRoutineId.kind === 'import'
     ? parsedRoutineId.routineId
     : routineSelection.routine.id;
+  const memberCount = normalizePerformanceMemberCount(
+    requestedMemberCount,
+    routineSelection.kind === 'system'
+      ? (options.routineOptions.find((routine) => routine.id === targetRoutineId)?.memberCount
+        || routineSelection.routine.memberCount
+        || 1)
+      : (routineSelection.routine.memberCount || 1),
+  );
 
-  const entries = batch.rows
+  const matchingRows = batch.rows
     .map((row, rowIndex) => ({ row, rowIndex }))
     .filter(({ row }) => getRowCell(row, options.indexes.age) === ageGroup)
     .map(({ row, rowIndex }) => {
@@ -2815,19 +2944,82 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId) {
       };
     })
     .filter(({ matchedRoutines }) => matchedRoutines.some((item) => item.id === targetRoutineId))
-    .map(({ row, rowIndex }) => normalizePerformanceScheduleEntry({
-      entryId: `row_${rowIndex + 1}`,
-      displayName: getRowCell(row, options.indexes.name) || getRowCell(row, 0) || `Mục ${rowIndex + 1}`,
+    .map(({ row, rowIndex }) => ({
+      row,
+      rowIndex,
+      name: getRowCell(row, options.indexes.name) || getRowCell(row, 0) || `Mục ${rowIndex + 1}`,
       unit: getRowCell(row, options.indexes.unit),
-      ageGroup: getRowCell(row, options.indexes.age),
-      routineName: routineSelection.routine.name,
-      sourceRowIndex: rowIndex,
-      originalOrder: rowIndex + 1,
+      rowAgeGroup: getRowCell(row, options.indexes.age),
     }));
+
+  let entries = [];
+  if (memberCount === 1) {
+    entries = matchingRows.map((item, entryIndex) => normalizePerformanceScheduleEntry({
+      entryId: `row_${item.rowIndex + 1}`,
+      displayName: item.name,
+      unit: item.unit,
+      ageGroup: item.rowAgeGroup,
+      routineName: routineSelection.routine.name,
+      sourceRowIndex: item.rowIndex,
+      sourceRowIndexes: [item.rowIndex],
+      originalOrder: entryIndex + 1,
+      memberNames: [item.name],
+      participantCount: 1,
+      expectedMemberCount: 1,
+      autoGroupKey: `single:${item.rowIndex}`,
+    }, entryIndex));
+  } else {
+    const rowsByUnit = new Map();
+    matchingRows.forEach((item) => {
+      const unitKey = normalizeText(item.unit) || '__missing_unit__';
+      if (!rowsByUnit.has(unitKey)) rowsByUnit.set(unitKey, []);
+      rowsByUnit.get(unitKey).push(item);
+    });
+
+    rowsByUnit.forEach((unitRows, unitKey) => {
+      const groupCountForUnit = Math.ceil(unitRows.length / memberCount);
+      for (let offset = 0; offset < unitRows.length; offset += memberCount) {
+        const members = unitRows.slice(offset, offset + memberCount);
+        const groupNumber = Math.floor(offset / memberCount) + 1;
+        const unit = members[0]?.unit || '';
+        const missingUnit = !unit;
+        const incomplete = members.length !== memberCount;
+        const suffix = groupCountForUnit > 1 ? ` ${groupNumber}` : '';
+        const displayName = unit
+          ? `Đội ${unit}${suffix}`
+          : `Đội chưa rõ đơn vị${suffix}`;
+        const attentionReasons = [];
+        if (missingUnit) attentionReasons.push('Thiếu Đơn vị nên chưa thể xác nhận cách gom đội.');
+        if (incomplete) attentionReasons.push(`Đội mới có ${members.length}/${memberCount} VĐV.`);
+
+        entries.push(normalizePerformanceScheduleEntry({
+          entryId: `team_${slugifyText(unitKey)}_${groupNumber}_${members[0]?.rowIndex + 1}`,
+          displayName,
+          unit,
+          ageGroup,
+          routineName: routineSelection.routine.name,
+          sourceRowIndex: members[0]?.rowIndex,
+          sourceRowIndexes: members.map((member) => member.rowIndex),
+          originalOrder: entries.length + 1,
+          memberNames: members.map((member) => member.name),
+          participantCount: members.length,
+          expectedMemberCount: memberCount,
+          groupNumber,
+          groupCountForUnit,
+          autoGroupKey: `${normalizeText(ageGroup)}:${targetRoutineId}:${unitKey}:${groupNumber}`,
+          needsAttention: missingUnit || incomplete,
+          attentionReason: attentionReasons.join(' '),
+        }, entries.length));
+      }
+    });
+  }
 
   return {
     routine: routineSelection.routine,
     routineSelection,
+    memberCount,
+    totalAthletes: matchingRows.length,
+    incompleteEntries: entries.filter((entry) => entry.needsAttention).length,
     entries,
     options,
   };
@@ -4433,6 +4625,7 @@ async function handleApi(req, res, url) {
       const batchId = String(payload.batchId || '').trim();
       const ageGroup = String(payload.ageGroup || '').trim();
       const routineId = String(payload.routineId || '').trim();
+      const memberCount = parsePerformanceMemberCount(payload.memberCount);
       const batch = getImportBatch(batchId);
 
       if (!batch) {
@@ -4447,24 +4640,42 @@ async function handleApi(req, res, url) {
         badRequest(res, 'routineId is required');
         return;
       }
+      if (payload.memberCount !== undefined && !memberCount) {
+        badRequest(res, `memberCount must be an integer from 1 to ${MAX_PERFORMANCE_MEMBER_COUNT}`);
+        return;
+      }
 
-      const result = buildPerformancePlannerEntries(batch, ageGroup, routineId);
+      const result = buildPerformancePlannerEntries(batch, ageGroup, routineId, memberCount);
       if (result.error) {
         badRequest(res, result.error);
         return;
       }
 
       const existing = getPerformanceScheduleGroupByKey(batchId, ageGroup, routineId);
-      const entries = existing?.entries?.length ? existing.entries : result.entries;
+      const existingMemberCount = existing?.entries?.length
+        ? normalizePerformanceMemberCount(existing.entries[0]?.expectedMemberCount, 1)
+        : null;
+      const existingWasAutoGrouped = Boolean(existing?.entries?.length)
+        && existing.entries.every((entry) => entry.autoGroupKey);
+      const canReuseSavedSchedule = existingWasAutoGrouped
+        && existingMemberCount === result.memberCount;
+      const entries = canReuseSavedSchedule ? existing.entries : result.entries;
 
       json(res, 200, {
         batchId,
         ageGroup,
-        routine: publicPerformanceRoutine(result.routine),
+        routine: {
+          ...publicPerformanceRoutine(result.routine),
+          memberCount: result.memberCount,
+        },
+        memberCount: result.memberCount,
+        totalAthletes: result.totalAthletes,
+        incompleteEntries: entries.filter((entry) => entry.needsAttention).length,
         totalEntries: entries.length,
         detectedColumns: publicPerformancePlannerOptions(batch).detectedColumns,
         entries,
-        savedSchedule: existing ? publicPerformanceScheduleGroup(existing, true) : null,
+        savedSchedule: canReuseSavedSchedule ? publicPerformanceScheduleGroup(existing, true) : null,
+        scheduleNeedsRegrouping: Boolean(existing) && !canReuseSavedSchedule,
       });
     } catch (error) {
       badRequest(res, error.message || 'Invalid JSON');

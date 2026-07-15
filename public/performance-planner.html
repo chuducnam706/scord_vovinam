@@ -185,6 +185,29 @@
         color: #cbd5e1;
       }
 
+      .entry-title {
+        color: #f8fafc;
+        font-weight: 900;
+      }
+
+      .member-list {
+        margin-top: 5px;
+        color: #94a3b8;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .entry-warning {
+        margin-top: 6px;
+        color: #fca5a5;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      tr.needs-attention td {
+        background: rgba(127, 29, 29, 0.28);
+      }
+
       .inline-actions {
         display: flex;
         gap: 6px;
@@ -285,12 +308,16 @@
             Bài quyền Vovinam
             <select id="routineSelect" disabled></select>
           </label>
+          <label>
+            Số VĐV / đội
+            <input id="memberCountInput" type="number" min="1" max="50" step="1" value="1" disabled />
+          </label>
         </div>
         <div class="actions">
           <button id="filterButton" type="button" disabled>Lọc danh sách</button>
           <button class="success" id="saveButton" type="button" disabled>Lưu thứ tự thi</button>
         </div>
-        <div class="muted" id="filterNote"></div>
+        <div class="muted" id="filterNote">Hệ thống tự gom theo đúng lứa tuổi + bài quyền + đơn vị.</div>
       </section>
 
       <section class="panel">
@@ -331,6 +358,7 @@
       const deleteRoutineBatchButton = document.getElementById('deleteRoutineBatchButton');
       const ageSelect = document.getElementById('ageSelect');
       const routineSelect = document.getElementById('routineSelect');
+      const memberCountInput = document.getElementById('memberCountInput');
       const filterButton = document.getElementById('filterButton');
       const saveButton = document.getElementById('saveButton');
       const statusEl = document.getElementById('status');
@@ -418,19 +446,30 @@
           } else {
             option.value = item[valueKey];
             option.textContent = item[labelKey];
+            if (item.memberCount) option.dataset.memberCount = String(item.memberCount);
           }
           select.appendChild(option);
         });
       }
 
       function updateFilterButtonState() {
+        const memberCount = Number(memberCountInput.value);
         filterButton.disabled = (
           ageSelect.disabled
           || routineSelect.disabled
           || !batchSelect.value
           || !ageSelect.value
           || !routineSelect.value
+          || !Number.isInteger(memberCount)
+          || memberCount < 1
+          || memberCount > 50
         );
+      }
+
+      function clearCurrentResult() {
+        currentEntries = [];
+        currentFilter = null;
+        renderEntries();
       }
 
       function getSelectedRoutineSourceValue() {
@@ -469,18 +508,30 @@
         const selectedBatch = getSelectedRoutineBatch();
         deleteRoutineBatchButton.disabled = !selectedBatch;
         routineSourceNote.textContent = selectedBatch
-          ? `Đang dùng danh mục import: ${selectedBatch.fileName}. Có ${selectedBatch.totalRoutines} bài quyền.`
-          : 'Đang dùng danh mục hệ thống Vovinam. Có thể import file riêng nếu giải của m dùng danh sách bài quyền riêng.';
+          ? `Đang dùng danh mục import: ${selectedBatch.fileName}. Có ${selectedBatch.totalRoutines} bài quyền; số người/đội có thể chỉnh khi lọc.`
+          : 'Đang dùng danh mục hệ thống Vovinam. File danh mục riêng nên có 2 cột: Bài quyền và Số người.';
       }
 
       function refreshRoutineSelect() {
         const previousValue = routineSelect.value;
-        const routineOptions = getRoutineOptionsForCurrentSource();
-        fillSelect(routineSelect, routineOptions, 'Chọn bài quyền');
+        const routineOptions = getRoutineOptionsForCurrentSource().map((routine) => ({
+          ...routine,
+          optionLabel: `${routine.name} • ${Number(routine.memberCount || 1)} người/đội`,
+        }));
+        fillSelect(routineSelect, routineOptions, 'Chọn bài quyền', 'optionLabel');
         if (previousValue && Array.from(routineSelect.options).some((option) => option.value === previousValue)) {
           routineSelect.value = previousValue;
         }
         routineSelect.disabled = !routineOptions.length;
+        syncMemberCountFromRoutine();
+        updateFilterButtonState();
+      }
+
+      function syncMemberCountFromRoutine() {
+        const option = routineSelect.selectedOptions[0];
+        const memberCount = Number(option?.dataset.memberCount || 1);
+        memberCountInput.value = Number.isInteger(memberCount) && memberCount > 0 ? memberCount : 1;
+        memberCountInput.disabled = !routineSelect.value;
         updateFilterButtonState();
       }
 
@@ -491,6 +542,7 @@
           ['routine', 'Bài quyền'],
           ['name', 'Tên VĐV/Đội'],
           ['unit', 'Đơn vị'],
+          ['memberCount', 'Số VĐV/đội'],
         ];
 
         labels.forEach(([key, label]) => {
@@ -513,13 +565,24 @@
           return;
         }
 
-        resultSummary.textContent = `${currentEntries.length} VĐV/đội thi thuộc nhóm ${currentFilter.ageGroup} - ${currentFilter.routineName}. Có thể bấm ↑ ↓ để đổi thứ tự trước khi lưu.`;
+        const totalAthletes = currentEntries.reduce((total, entry) => (
+          total + Number(entry.participantCount || entry.memberNames?.length || 1)
+        ), 0);
+        const warningCount = currentEntries.filter((entry) => entry.needsAttention).length;
+        resultSummary.textContent = `${currentEntries.length} lượt thi • ${totalAthletes} VĐV • ${currentFilter.memberCount} VĐV/đội. ${warningCount ? `Có ${warningCount} đội chưa đủ dữ liệu, cần kiểm tra trước khi lưu.` : 'Có thể bấm ↑ ↓ để đổi thứ tự trước khi lưu.'}`;
 
         currentEntries.forEach((entry, index) => {
           const tr = document.createElement('tr');
+          tr.className = entry.needsAttention ? 'needs-attention' : '';
+          const members = Array.isArray(entry.memberNames) ? entry.memberNames : [];
+          const showMembers = Number(entry.expectedMemberCount || 1) > 1 || members.length > 1;
           tr.innerHTML = `
             <td>${index + 1}</td>
-            <td>${escapeHtml(entry.displayName)}</td>
+            <td>
+              <div class="entry-title">${escapeHtml(entry.displayName)}</div>
+              ${showMembers ? `<div class="member-list">Thành viên: ${escapeHtml(entry.memberSummary || members.join(', '))}</div>` : ''}
+              ${entry.needsAttention ? `<div class="entry-warning">${escapeHtml(entry.attentionReason || 'Nhóm này chưa đủ dữ liệu.')}</div>` : ''}
+            </td>
             <td>${escapeHtml(entry.unit)}</td>
             <td>${escapeHtml(entry.ageGroup)}</td>
             <td>${escapeHtml(entry.routineName)}</td>
@@ -536,7 +599,7 @@
           resultBody.appendChild(tr);
         });
 
-        saveButton.disabled = false;
+        saveButton.disabled = warningCount > 0;
       }
 
       function moveEntry(index, step) {
@@ -564,7 +627,7 @@
           row.innerHTML = `
             <div>
               <div><strong>${escapeHtml(schedule.ageGroup)} - ${escapeHtml(schedule.routineName)}</strong></div>
-              <div class="muted">${escapeHtml(schedule.batchId)} | ${schedule.totalEntries} mục | ${new Date(schedule.updatedAt).toLocaleString('vi-VN')}</div>
+              <div class="muted">${escapeHtml(schedule.batchId)} | ${schedule.totalEntries} lượt${schedule.autoGrouped ? ` | ${schedule.memberCount} VĐV/đội` : ''} | ${new Date(schedule.updatedAt).toLocaleString('vi-VN')}</div>
             </div>
             <div class="history-actions">
               <a class="secondary" href="/mc-reader.html?groupId=${encodeURIComponent(schedule.groupId)}">Màn đọc</a>
@@ -586,6 +649,10 @@
             refreshRoutineSelect();
             ageSelect.value = schedule.ageGroup;
             routineSelect.value = schedule.routineId;
+            syncMemberCountFromRoutine();
+            if (schedule.autoGrouped && Number(schedule.memberCount) > 0) {
+              memberCountInput.value = String(schedule.memberCount);
+            }
             await filterEntries();
           });
 
@@ -776,9 +843,10 @@
         const batchId = batchSelect.value;
         const ageGroup = ageSelect.value;
         const routineId = routineSelect.value;
+        const memberCount = Number(memberCountInput.value);
 
-        if (!batchId || !ageGroup || !routineId) {
-          setStatus('Chọn đủ batch, lứa tuổi và bài quyền trước khi lọc.', 'error');
+        if (!batchId || !ageGroup || !routineId || !Number.isInteger(memberCount) || memberCount < 1 || memberCount > 50) {
+          setStatus('Chọn đủ batch, lứa tuổi, bài quyền và số VĐV/đội trước khi lọc.', 'error');
           return;
         }
 
@@ -788,7 +856,7 @@
         const response = await fetch('/api/performance/planner/filter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ batchId, ageGroup, routineId }),
+          body: JSON.stringify({ batchId, ageGroup, routineId, memberCount }),
         });
         const data = await response.json();
         filterButton.disabled = false;
@@ -803,15 +871,29 @@
           ageGroup,
           routineId,
           routineName: data.routine?.name || '',
+          memberCount: Number(data.memberCount || memberCount),
         };
         currentEntries = data.entries || [];
         renderEntries();
-        setStatus(data.savedSchedule ? 'Đã nạp lại thứ tự đã lưu trước đó.' : 'Đã lọc xong danh sách hội diễn.', 'ok');
+        if (Number(data.incompleteEntries || 0) > 0) {
+          setStatus(`Đã tự gom đội nhưng còn ${data.incompleteEntries} đội thiếu người hoặc thiếu đơn vị.`, 'error');
+        } else if (data.savedSchedule) {
+          setStatus('Đã nạp lại thứ tự đã lưu trước đó.', 'ok');
+        } else if (data.scheduleNeedsRegrouping) {
+          setStatus('Số VĐV/đội đã thay đổi. Hệ thống đã gom lại danh sách, hãy kiểm tra rồi lưu.', 'ok');
+        } else {
+          setStatus('Đã tự gom xong danh sách hội diễn.', 'ok');
+        }
       }
 
       async function saveSchedule() {
         if (!currentFilter || currentEntries.length === 0) {
           setStatus('Chưa có danh sách nào để lưu.', 'error');
+          return;
+        }
+        const invalidEntry = currentEntries.find((entry) => entry.needsAttention);
+        if (invalidEntry) {
+          setStatus(invalidEntry.attentionReason || 'Còn đội chưa đủ dữ liệu nên chưa thể lưu.', 'error');
           return;
         }
 
@@ -841,19 +923,28 @@
       }
 
       batchSelect.addEventListener('change', async () => {
-        currentEntries = [];
-        currentFilter = null;
-        renderEntries();
+        clearCurrentResult();
         await loadPlannerOptions(batchSelect.value);
       });
 
       routineSourceSelect.addEventListener('change', () => {
+        clearCurrentResult();
         renderRoutineSourceSelect();
         refreshRoutineSelect();
       });
 
-      ageSelect.addEventListener('change', updateFilterButtonState);
-      routineSelect.addEventListener('change', updateFilterButtonState);
+      ageSelect.addEventListener('change', () => {
+        clearCurrentResult();
+        updateFilterButtonState();
+      });
+      routineSelect.addEventListener('change', () => {
+        clearCurrentResult();
+        syncMemberCountFromRoutine();
+      });
+      memberCountInput.addEventListener('change', () => {
+        clearCurrentResult();
+        updateFilterButtonState();
+      });
 
       importRoutineButton.addEventListener('click', importRoutineBatch);
       deleteRoutineBatchButton.addEventListener('click', deleteSelectedRoutineBatch);

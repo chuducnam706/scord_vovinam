@@ -429,6 +429,11 @@
         scheduleTableBody.innerHTML = rows.map((row, index) => {
           const statusClass = row.currentStatus.replace(/_/g, '-');
           const isFocused = row.groupId === focusGroupId;
+          const memberSummary = row.entry.memberSummary
+            || (Array.isArray(row.entry.memberNames) ? row.entry.memberNames.join(', ') : '');
+          const subText = memberSummary && Number(row.entry.participantCount || 1) > 1
+            ? `Thành viên: ${memberSummary}`
+            : (row.groupId === focusGroupId ? 'Đang được mở từ danh sách vừa chọn' : 'Danh sách hội diễn đã lưu');
           return `
             <tr class="row-${escapeHtml(statusClass)} ${isFocused ? 'focused-row' : ''}">
               <td><div class="order-badge">${index + 1}</div></td>
@@ -448,7 +453,7 @@
               <td>
                 <div class="name-cell">
                   <strong>${escapeHtml(row.entry.displayName)}</strong>
-                  <div class="cell-sub">${escapeHtml(row.groupId === focusGroupId ? 'Đang được mở từ danh sách vừa chọn' : 'Danh sách hội diễn đã lưu')}</div>
+                  <div class="cell-sub">${escapeHtml(subText)}</div>
                 </div>
               </td>
               <td>${escapeHtml(row.entry.unit)}</td>
