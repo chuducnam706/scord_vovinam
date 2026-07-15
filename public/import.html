@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Import dữ liệu</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #07111f;
+        color: #f8fafc;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 18px 20px;
+        background: #0f172a;
+        border-bottom: 1px solid #334155;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 30px;
+      }
+
+      .muted {
+        color: #94a3b8;
+      }
+
+      a,
+      button {
+        display: grid;
+        place-items: center;
+        min-height: 44px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #ffffff;
+        font-size: 15px;
+        font-weight: 800;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      a.secondary,
+      button.secondary {
+        background: #334155;
+      }
+
+      button.danger {
+        background: #dc2626;
+      }
+
+      main {
+        display: grid;
+        place-items: start center;
+        padding: 22px;
+      }
+
+      .panel {
+        display: grid;
+        gap: 16px;
+        width: min(780px, 100%);
+        padding: 18px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #0f172a;
+      }
+
+      .form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      input[type='file'] {
+        max-width: 100%;
+        color: #cbd5e1;
+      }
+
+      .status {
+        min-height: 24px;
+        color: #cbd5e1;
+      }
+
+      .history {
+        display: grid;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .history-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .history-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #111827;
+        color: #cbd5e1;
+      }
+
+      .history-item a {
+        min-height: 34px;
+      }
+
+      .history-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .history-actions a,
+      .history-actions button {
+        min-height: 34px;
+      }
+
+      @media (max-width: 720px) {
+        header,
+        .history-item {
+          display: grid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Import dữ liệu</h1>
+        <div class="muted">Màn 1: chọn file để import và lưu lâu dài vào SQLite.</div>
+      </div>
+      <a class="secondary" href="/">Dashboard</a>
+    </header>
+
+    <main>
+      <section class="panel">
+        <div>
+          <h2>Danh sách VĐV</h2>
+          <div class="muted">Hỗ trợ `.xlsx`, `.csv`, `.tsv`. File `.xls` cũ chưa hỗ trợ.</div>
+        </div>
+
+        <form class="form" id="importForm">
+          <input id="excelFile" type="file" accept=".xlsx,.csv,.tsv" />
+          <button type="submit">Import và lưu</button>
+        </form>
+
+        <div class="status" id="status">Chưa có file</div>
+
+        <section class="history">
+          <h2>Lịch sử import đã lưu</h2>
+          <div class="history-list" id="historyList">Đang tải...</div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const form = document.getElementById('importForm');
+      const fileInput = document.getElementById('excelFile');
+      const statusEl = document.getElementById('status');
+      const historyList = document.getElementById('historyList');
+
+      function renderHistory(batches) {
+        historyList.innerHTML = '';
+
+        if (batches.length === 0) {
+          historyList.textContent = 'Chưa có batch import nào.';
+          return;
+        }
+
+        batches.forEach((batch) => {
+          const row = document.createElement('div');
+          const info = document.createElement('div');
+          const actions = document.createElement('div');
+          const link = document.createElement('a');
+          const deleteButton = document.createElement('button');
+
+          row.className = 'history-item';
+          actions.className = 'history-actions';
+          info.textContent = `${batch.fileName} | ${batch.totalRows} dòng | ${new Date(batch.savedAt).toLocaleString()}`;
+          link.href = `/import-preview.html?batchId=${encodeURIComponent(batch.batchId)}`;
+          link.textContent = 'Xem';
+          deleteButton.type = 'button';
+          deleteButton.className = 'danger';
+          deleteButton.textContent = 'Xoá';
+          deleteButton.addEventListener('click', () => deleteBatch(batch));
+
+          actions.appendChild(link);
+          actions.appendChild(deleteButton);
+          row.appendChild(info);
+          row.appendChild(actions);
+          historyList.appendChild(row);
+        });
+      }
+
+      async function loadHistory() {
+        const response = await fetch('/api/imports/athletes');
+        const data = await response.json();
+        renderHistory(data.batches || []);
+      }
+
+      async function deleteBatch(batch) {
+        const ok = window.confirm(`Xoá batch "${batch.fileName}" khỏi SQLite?`);
+        if (!ok) return;
+
+        statusEl.textContent = 'Đang xoá batch...';
+        const response = await fetch(`/api/imports/athletes/${encodeURIComponent(batch.batchId)}`, {
+          method: 'DELETE',
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          statusEl.textContent = data.error || 'Không xoá được batch.';
+          return;
+        }
+
+        statusEl.textContent = `Đã xoá ${data.fileName || batch.fileName}`;
+        await loadHistory();
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        const file = fileInput.files[0];
+        if (!file) {
+          statusEl.textContent = 'Chọn file .xlsx, .csv hoặc .tsv trước';
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        statusEl.textContent = 'Đang đọc file...';
+
+        const response = await fetch('/api/import/athletes', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          statusEl.textContent = data.error || 'Không import được file';
+          return;
+        }
+
+        sessionStorage.setItem('athleteImportPreview', JSON.stringify(data));
+        window.location.href = `/import-preview.html?batchId=${encodeURIComponent(data.batchId)}`;
+      });
+
+      loadHistory().catch(() => {
+        historyList.textContent = 'Không tải được lịch sử import.';
+      });
+    </script>
+  </body>
+</html>

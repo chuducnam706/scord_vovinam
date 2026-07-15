@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Điều phối sân</title>
+    <style>
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #101114;
+        color: #f7f7f2;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 22px;
+        background: #181a20;
+        border-bottom: 1px solid #333741;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 { font-size: 30px; }
+      h2 { font-size: 20px; }
+
+      .muted {
+        color: #a8adb7;
+        line-height: 1.35;
+      }
+
+      main {
+        display: grid;
+        gap: 14px;
+        padding: 16px;
+      }
+
+      a,
+      button {
+        display: grid;
+        place-items: center;
+        min-height: 42px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 7px;
+        background: #315f8f;
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 800;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .secondary { background: #3a404c; }
+      .danger { background: #a83232; }
+      .combat-action { background: #237083; }
+      .performance-action { background: #7155a6; }
+      .success { background: #2f7d4e; }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .status {
+        padding: 12px 14px;
+        border: 1px solid #333741;
+        border-radius: 8px;
+        background: #181a20;
+        color: #d8dbe2;
+      }
+
+      .status.ok {
+        border-color: #2f7d4e;
+        background: #132719;
+        color: #dff6e6;
+      }
+
+      .status.error {
+        border-color: #a83232;
+        background: #311616;
+        color: #ffe1e1;
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+      }
+
+      .summary-item {
+        padding: 12px;
+        border: 1px solid #333741;
+        border-radius: 8px;
+        background: #181a20;
+      }
+
+      .summary-item span {
+        display: block;
+        color: #a8adb7;
+        font-size: 13px;
+      }
+
+      .summary-item strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 26px;
+      }
+
+      .court-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 12px;
+      }
+
+      .court-card {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+        border: 1px solid #333741;
+        border-radius: 8px;
+        background: #181a20;
+      }
+
+      .court-card.empty { border-left: 5px solid #2f7d4e; }
+      .court-card.combat { border-left: 5px solid #237083; }
+      .court-card.performance { border-left: 5px solid #7155a6; }
+
+      .court-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .court-title {
+        font-size: 30px;
+        font-weight: 1000;
+        line-height: 1;
+      }
+
+      .badge {
+        width: fit-content;
+        padding: 7px 9px;
+        border-radius: 999px;
+        background: #3a404c;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 900;
+        white-space: nowrap;
+      }
+
+      .badge.empty { background: #2f7d4e; }
+      .badge.combat { background: #237083; }
+      .badge.performance { background: #7155a6; }
+      .badge.unassigned { background: #8a6a1f; }
+      .badge.assigned { background: #7155a6; }
+      .badge.completed { background: #8f3030; }
+
+      .mode-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field label {
+        color: #c9ccd3;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      select {
+        min-height: 42px;
+        width: 100%;
+        padding: 0 10px;
+        border: 1px solid #3a404c;
+        border-radius: 7px;
+        background: #101114;
+        color: #f7f7f2;
+        font-size: 14px;
+      }
+
+      .schedule-picker,
+      .queue-list {
+        display: grid;
+        gap: 6px;
+        max-height: 180px;
+        overflow: auto;
+        padding: 8px;
+        border: 1px solid #333741;
+        border-radius: 7px;
+        background: #101114;
+      }
+
+      .check-row,
+      .queue-row {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 8px;
+        align-items: start;
+        min-height: 34px;
+        padding: 6px;
+        border-radius: 6px;
+        color: #e7e9ee;
+        font-size: 13px;
+      }
+
+      .check-row:hover,
+      .queue-row.active {
+        background: #20232b;
+      }
+
+      .check-row input {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        accent-color: #7155a6;
+      }
+
+      .row-title {
+        display: block;
+        font-weight: 900;
+      }
+
+      .row-sub {
+        display: block;
+        margin-top: 2px;
+        color: #a8adb7;
+      }
+
+      .current {
+        display: grid;
+        gap: 6px;
+        padding: 10px;
+        border: 1px solid #333741;
+        border-radius: 8px;
+        background: #121419;
+      }
+
+      .current strong {
+        font-size: 16px;
+        line-height: 1.25;
+      }
+
+      .progress {
+        height: 8px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #2b3039;
+      }
+
+      .progress > div {
+        height: 100%;
+        width: 0;
+        background: #d8a63d;
+      }
+
+      @media (max-width: 760px) {
+        header,
+        .court-top {
+          display: grid;
+        }
+
+        .actions {
+          display: grid;
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Điều phối sân</h1>
+        <p class="muted">Màn gọn để chọn loại sân và vào đúng màn vận hành.</p>
+      </div>
+      <div class="actions">
+        <a class="performance-action" href="/performance-dispatch.html">Chia sân hội diễn</a>
+        <a class="secondary" href="/">Dashboard</a>
+        <button class="secondary" id="refreshButton" type="button">Tải lại</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="status" id="status">Đang tải 6 sân...</div>
+      <section class="summary" id="summary"></section>
+      <section class="court-grid" id="courtGrid"></section>
+    </main>
+
+    <script>
+      const statusEl = document.getElementById('status');
+      const summaryEl = document.getElementById('summary');
+      const courtGrid = document.getElementById('courtGrid');
+      const refreshButton = document.getElementById('refreshButton');
+
+      const modeLabels = {
+        combat: 'Đối kháng',
+        performance: 'Hội diễn',
+      };
+
+      let dispatchData = { courts: [], schedules: [] };
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function setStatus(message, type = '') {
+        statusEl.textContent = message;
+        statusEl.className = `status ${type}`.trim();
+      }
+
+      function modeClass(court) {
+        return court.mode || 'empty';
+      }
+
+      function progressPercent(counts, total) {
+        const completed = Number(counts?.completed || 0);
+        const value = total ? Math.round((completed / Number(total)) * 100) : 0;
+        return Math.max(0, Math.min(100, value));
+      }
+
+      function renderSummary(data) {
+        const courts = data.courts || [];
+        const emptyCount = courts.filter((court) => !court.assigned).length;
+        const combatCount = courts.filter((court) => court.mode === 'combat').length;
+        const performanceCount = courts.filter((court) => court.mode === 'performance').length;
+
+        summaryEl.innerHTML = `
+          <div class="summary-item"><span>Trống</span><strong>${emptyCount}</strong></div>
+          <div class="summary-item"><span>Đối kháng</span><strong>${combatCount}</strong></div>
+          <div class="summary-item"><span>Hội diễn</span><strong>${performanceCount}</strong></div>
+        `;
+      }
+
+      function scheduleCheckboxes(court) {
+        const schedules = (dispatchData.schedules || [])
+          .filter((schedule) => schedule.hasRemainingEntries)
+          .filter((schedule) => !schedule.assignedCourt);
+
+        if (!schedules.length) {
+          return '<div class="muted">Không còn nội dung khả dụng để thêm.</div>';
+        }
+
+        return schedules.map((schedule) => `
+          <label class="check-row">
+            <input type="checkbox" value="${escapeHtml(schedule.groupId)}" data-schedule-check="${escapeHtml(court.court)}" />
+            <span>
+              <span class="row-title">${escapeHtml(schedule.ageGroup)} - ${escapeHtml(schedule.routineName)}</span>
+              <span class="row-sub">${escapeHtml(schedule.counts.completed)}/${escapeHtml(schedule.totalEntries)} lượt đã xong</span>
+            </span>
+          </label>
+        `).join('');
+      }
+
+      function queueRows(court) {
+        const queue = court.queue || [];
+        if (!queue.length) {
+          return '<div class="muted">Chưa có nội dung trong hàng chờ.</div>';
+        }
+
+        return queue.map((item) => `
+          <div class="queue-row ${item.active ? 'active' : ''}">
+            <span class="badge ${item.active ? 'performance' : 'assigned'}">${escapeHtml(item.order)}</span>
+            <span>
+              <span class="row-title">${escapeHtml(item.title)}</span>
+              <span class="row-sub">${escapeHtml(item.counts.completed)}/${escapeHtml(item.totalEntries)} lượt đã xong${item.active ? ' • Đang chạy' : ''}</span>
+            </span>
+          </div>
+        `).join('');
+      }
+
+      function renderEmptyCourt(court) {
+        return `
+          <div class="mode-buttons">
+            <button class="combat-action" type="button" data-assign-mode="${escapeHtml(court.court)}" data-mode="combat">Đối kháng</button>
+            <button class="performance-action" type="button" data-assign-mode="${escapeHtml(court.court)}" data-mode="performance">Hội diễn</button>
+          </div>
+        `;
+      }
+
+      function renderCombatCourt(court) {
+        return `
+          <div class="actions">
+            <a class="combat-action" href="${escapeHtml(court.targetUrl || '#')}">Vào sân</a>
+            <button class="danger" type="button" data-release="${escapeHtml(court.court)}">Giải phóng</button>
+          </div>
+        `;
+      }
+
+      function renderPerformanceCourt(court) {
+        return `
+          <div class="actions">
+            <a class="performance-action" href="${escapeHtml(court.targetUrl || `/performance-court.html?court=${court.court}`)}">Vào sân</a>
+            <button class="danger" type="button" data-release="${escapeHtml(court.court)}">Giải phóng</button>
+          </div>
+        `;
+      }
+
+      function renderCourts(data) {
+        const courts = data.courts || [];
+
+        courtGrid.innerHTML = courts.map((court) => {
+          const mode = modeClass(court);
+          const label = court.modeLabel || 'Trống';
+          const body = !court.assigned
+            ? renderEmptyCourt(court)
+            : (court.mode === 'performance' ? renderPerformanceCourt(court) : renderCombatCourt(court));
+
+          return `
+            <article class="court-card ${escapeHtml(mode)}">
+              <div class="court-top">
+                <div>
+                  <div class="court-title">Sân ${escapeHtml(court.court)}</div>
+                  <div class="muted">${escapeHtml(court.assigned ? court.modeLabel : 'Chưa dùng')}</div>
+                </div>
+                <div class="badge ${escapeHtml(mode)}">${escapeHtml(label)}</div>
+              </div>
+              ${body}
+            </article>
+          `;
+        }).join('');
+
+        courtGrid.querySelectorAll('button[data-assign-mode]').forEach((button) => {
+          button.addEventListener('click', () => assignMode(button.dataset.assignMode, button.dataset.mode));
+        });
+
+        courtGrid.querySelectorAll('button[data-assign-schedule]').forEach((button) => {
+          button.addEventListener('click', () => assignSchedule(button.dataset.assignSchedule));
+        });
+
+        courtGrid.querySelectorAll('button[data-clear-schedule]').forEach((button) => {
+          button.addEventListener('click', () => clearSchedule(button.dataset.clearSchedule));
+        });
+
+        courtGrid.querySelectorAll('button[data-release]').forEach((button) => {
+          button.addEventListener('click', () => releaseCourt(button.dataset.release));
+        });
+      }
+
+      function render(data) {
+        dispatchData = data || { courts: [], schedules: [] };
+        renderSummary(dispatchData);
+        renderCourts(dispatchData);
+      }
+
+      async function loadDispatch(showOk = true) {
+        const response = await fetch('/api/performance/dispatch');
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Không tải được dữ liệu điều phối.');
+        }
+        render(data);
+        if (showOk) setStatus('Sẵn sàng điều phối sân.', 'ok');
+      }
+
+      async function assignMode(court, mode) {
+        setStatus(`Đang chuyển sân ${court} sang ${modeLabels[mode] || mode}...`);
+        const response = await fetch(`/api/courts/${encodeURIComponent(court)}/assign`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          setStatus(data.error || 'Không đổi được mode sân.', 'error');
+          await loadDispatch(false);
+          return;
+        }
+        await loadDispatch(false);
+        setStatus(`Sân ${court} đã là ${modeLabels[mode] || mode}.`, 'ok');
+      }
+
+      async function assignSchedule(court) {
+        const checks = Array.from(courtGrid.querySelectorAll(`input[data-schedule-check="${court}"]:checked`));
+        const groupIds = checks.map((item) => item.value).filter(Boolean);
+        if (!groupIds.length) {
+          setStatus(`Tick ít nhất một nội dung để thêm vào sân ${court}.`, 'error');
+          return;
+        }
+
+        setStatus(`Đang thêm ${groupIds.length} nội dung vào sân ${court}...`);
+        const response = await fetch(`/api/performance/courts/${encodeURIComponent(court)}/assign-schedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groupIds }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          setStatus(data.error || 'Không gán được nội dung.', 'error');
+          await loadDispatch(false);
+          return;
+        }
+        await loadDispatch(false);
+        setStatus(`Đã thêm nội dung vào hàng chờ sân ${court}.`, 'ok');
+      }
+
+      async function clearSchedule(court) {
+        const ok = window.confirm(`Xóa toàn bộ hàng chờ hội diễn khỏi sân ${court}?`);
+        if (!ok) return;
+
+        setStatus(`Đang xóa hàng chờ khỏi sân ${court}...`);
+        const response = await fetch(`/api/performance/courts/${encodeURIComponent(court)}/clear-schedule`, {
+          method: 'POST',
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          setStatus(data.error || 'Không bỏ được nội dung.', 'error');
+          return;
+        }
+        await loadDispatch(false);
+        setStatus(`Đã xóa hàng chờ khỏi sân ${court}.`, 'ok');
+      }
+
+      async function releaseCourt(court) {
+        const ok = window.confirm(`Giải phóng sân ${court}? Điểm đã lưu không bị xoá.`);
+        if (!ok) return;
+
+        setStatus(`Đang giải phóng sân ${court}...`);
+        const response = await fetch(`/api/courts/${encodeURIComponent(court)}/release`, {
+          method: 'POST',
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          setStatus(data.error || 'Không giải phóng được sân.', 'error');
+          return;
+        }
+        await loadDispatch(false);
+        setStatus(`Đã giải phóng sân ${court}.`, 'ok');
+      }
+
+      refreshButton.addEventListener('click', () => {
+        setStatus('Đang tải lại...');
+        loadDispatch().catch((error) => setStatus(error.message, 'error'));
+      });
+
+      loadDispatch().catch((error) => setStatus(error.message, 'error'));
+    </script>
+  </body>
+</html>

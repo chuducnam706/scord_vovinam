@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Preview dữ liệu</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #07111f;
+        color: #f8fafc;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 18px 20px;
+        background: #0f172a;
+        border-bottom: 1px solid #334155;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 30px;
+      }
+
+      .muted {
+        color: #94a3b8;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .filter-menu {
+        position: relative;
+      }
+
+      .filter-menu[hidden] {
+        display: none;
+      }
+
+      .filter-toggle.active {
+        background: #7c3aed;
+      }
+
+      a,
+      button {
+        display: grid;
+        place-items: center;
+        min-height: 44px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #ffffff;
+        font-size: 15px;
+        font-weight: 800;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      a.secondary,
+      button.secondary {
+        background: #334155;
+      }
+
+      button.success {
+        background: #16a34a;
+      }
+
+      button.danger {
+        background: #dc2626;
+      }
+
+      main {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+      }
+
+      .summary {
+        padding: 14px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #0f172a;
+        color: #cbd5e1;
+      }
+
+      .filters {
+        display: grid;
+        gap: 12px;
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        z-index: 20;
+        width: min(720px, calc(100vw - 36px));
+        padding: 14px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #0f172a;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.45);
+      }
+
+      .filters[hidden] {
+        display: none;
+      }
+
+      .filters-title {
+        font-weight: 900;
+      }
+
+      .filters-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 10px;
+        align-items: end;
+      }
+
+      .filter-field {
+        display: grid;
+        gap: 6px;
+        color: #cbd5e1;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      select {
+        min-height: 44px;
+        width: 100%;
+        padding: 0 10px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #020617;
+        color: #f8fafc;
+        font-size: 15px;
+      }
+
+      select:disabled {
+        color: #64748b;
+      }
+
+      .filter-status {
+        color: #94a3b8;
+        font-size: 13px;
+      }
+
+      .preview-wrap {
+        max-height: calc(100vh - 210px);
+        overflow: auto;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #020617;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+
+      th,
+      td {
+        min-width: 120px;
+        max-width: 260px;
+        padding: 9px 10px;
+        border-bottom: 1px solid #1e293b;
+        text-align: left;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+
+      th {
+        position: sticky;
+        top: 0;
+        background: #111827;
+        color: #e2e8f0;
+        z-index: 1;
+      }
+
+      td {
+        color: #cbd5e1;
+      }
+
+      th[contenteditable='true'],
+      td[contenteditable='true'] {
+        outline: 0;
+        cursor: text;
+      }
+
+      th[contenteditable='true']:focus,
+      td[contenteditable='true']:focus {
+        background: #1d4ed8;
+        color: #ffffff;
+      }
+
+      .row-action {
+        min-width: 90px;
+        width: 90px;
+        text-align: center;
+      }
+
+      .row-action button {
+        min-height: 32px;
+        padding: 0 10px;
+        font-size: 13px;
+      }
+
+      .empty-row {
+        color: #94a3b8;
+        text-align: center;
+      }
+
+      @media (max-width: 720px) {
+        header {
+          display: grid;
+        }
+
+        .actions {
+          justify-content: stretch;
+        }
+
+        .actions > *,
+        .filter-menu,
+        .filter-menu > button {
+          width: 100%;
+        }
+
+        .filters {
+          left: 0;
+          right: auto;
+          width: min(100%, calc(100vw - 36px));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Preview dữ liệu</h1>
+        <div class="muted">Màn 2: hiển thị dữ liệu đã import và đã lưu dưới dạng bảng.</div>
+      </div>
+      <div class="actions">
+        <button class="success" id="saveButton" type="button" hidden>Lưu chỉnh sửa</button>
+        <button id="addRowButton" type="button" hidden>Thêm dòng</button>
+        <div class="filter-menu" id="filterMenu" hidden>
+          <button class="filter-toggle" id="filterToggleButton" type="button" aria-expanded="false">Bộ lọc ▾</button>
+          <div class="filters" id="filtersPanel" hidden>
+            <div class="filters-title">Bộ lọc danh sách VĐV</div>
+            <div class="filters-grid">
+              <label class="filter-field">
+                Lứa tuổi
+                <select id="ageFilter"></select>
+              </label>
+              <label class="filter-field">
+                Giới tính
+                <select id="genderFilter"></select>
+              </label>
+              <button class="secondary" id="clearFiltersButton" type="button">Bỏ lọc</button>
+            </div>
+            <div class="filter-status" id="filterStatus"></div>
+          </div>
+        </div>
+        <button class="danger" id="deleteBatchButton" type="button" hidden>Xoá batch</button>
+        <a class="secondary" href="/import.html">Import file khác</a>
+        <a class="secondary" href="/">Dashboard</a>
+      </div>
+    </header>
+
+    <main>
+      <div class="summary" id="summary">Đang tải dữ liệu preview...</div>
+      <div class="preview-wrap" id="previewWrap" hidden>
+        <table>
+          <thead id="previewHead"></thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+    </main>
+
+    <script>
+      const summary = document.getElementById('summary');
+      const previewWrap = document.getElementById('previewWrap');
+      const previewHead = document.getElementById('previewHead');
+      const previewBody = document.getElementById('previewBody');
+      const saveButton = document.getElementById('saveButton');
+      const addRowButton = document.getElementById('addRowButton');
+      const deleteBatchButton = document.getElementById('deleteBatchButton');
+      const filterMenu = document.getElementById('filterMenu');
+      const filterToggleButton = document.getElementById('filterToggleButton');
+      const filtersPanel = document.getElementById('filtersPanel');
+      const ageFilter = document.getElementById('ageFilter');
+      const genderFilter = document.getElementById('genderFilter');
+      const clearFiltersButton = document.getElementById('clearFiltersButton');
+      const filterStatus = document.getElementById('filterStatus');
+      const params = new URLSearchParams(window.location.search);
+      const batchId = params.get('batchId');
+      const raw = sessionStorage.getItem('athleteImportPreview');
+      let currentData = null;
+      let currentRows = [];
+      let dirty = false;
+      let filterIndexes = {
+        age: -1,
+        gender: -1,
+      };
+      const filterState = {
+        age: '',
+        gender: '',
+      };
+      const filterAliases = {
+        age: ['lua tuoi', 'nhom tuoi', 'do tuoi', 'tuoi', 'nam sinh', 'ngay sinh', 'age'],
+        gender: ['gioi tinh', 'phai', 'nam nu', 'sex', 'gender'],
+      };
+
+      function normalizeText(value) {
+        return String(value || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/đ/g, 'd')
+          .replace(/Đ/g, 'D')
+          .toLowerCase()
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      function findColumnIndex(aliases) {
+        return currentData.columns.findIndex((column) => {
+          const normalizedColumn = normalizeText(column);
+          return aliases.some((alias) => normalizedColumn.includes(alias));
+        });
+      }
+
+      function getCellValue(row, columnIndex) {
+        if (columnIndex < 0) return '';
+        return String(row[columnIndex] || '').trim();
+      }
+
+      function uniqueValuesForColumn(columnIndex) {
+        if (columnIndex < 0) return [];
+
+        return Array.from(new Set(
+          currentRows
+            .map((row) => getCellValue(row, columnIndex))
+            .filter((value) => value !== '')
+        )).sort((a, b) => a.localeCompare(b, 'vi', { numeric: true, sensitivity: 'base' }));
+      }
+
+      function fillFilterSelect(select, field, label) {
+        const columnIndex = filterIndexes[field];
+        const previousValue = filterState[field];
+        select.innerHTML = '';
+
+        const allOption = document.createElement('option');
+        allOption.value = '';
+        allOption.textContent = columnIndex === -1 ? `Không thấy cột ${label}` : `Tất cả ${label}`;
+        select.appendChild(allOption);
+
+        if (columnIndex === -1) {
+          select.disabled = true;
+          filterState[field] = '';
+          return;
+        }
+
+        const values = uniqueValuesForColumn(columnIndex);
+        values.forEach((value) => {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = value;
+          select.appendChild(option);
+        });
+
+        select.disabled = values.length === 0;
+        if (previousValue && values.includes(previousValue)) {
+          select.value = previousValue;
+        } else {
+          filterState[field] = '';
+          select.value = '';
+        }
+      }
+
+      function refreshFilterPanel() {
+        if (!currentData) return;
+
+        filterIndexes = {
+          age: findColumnIndex(filterAliases.age),
+          gender: findColumnIndex(filterAliases.gender),
+        };
+
+        fillFilterSelect(ageFilter, 'age', 'lứa tuổi');
+        fillFilterSelect(genderFilter, 'gender', 'giới tính');
+
+        const detected = [];
+        const missing = [];
+        if (filterIndexes.age !== -1) detected.push(`Lứa tuổi: ${currentData.columns[filterIndexes.age]}`);
+        else missing.push('Lứa tuổi');
+        if (filterIndexes.gender !== -1) detected.push(`Giới tính: ${currentData.columns[filterIndexes.gender]}`);
+        else missing.push('Giới tính');
+
+        filterStatus.textContent = [
+          detected.length ? `Đã nhận diện ${detected.join(' | ')}` : '',
+          missing.length ? `Chưa thấy cột: ${missing.join(', ')}. Có thể sửa tên cột rồi bấm lưu.` : '',
+        ].filter(Boolean).join(' — ');
+        filterMenu.hidden = false;
+        updateFilterToggleText();
+      }
+
+      function hasActiveFilters() {
+        return Boolean(filterState.age || filterState.gender);
+      }
+
+      function activeFilterCount() {
+        return [filterState.age, filterState.gender].filter(Boolean).length;
+      }
+
+      function updateFilterToggleText() {
+        const count = activeFilterCount();
+        filterToggleButton.textContent = count > 0 ? `Bộ lọc (${count}) ▾` : 'Bộ lọc ▾';
+        filterToggleButton.classList.toggle('active', count > 0);
+      }
+
+      function setFilterPanelOpen(open) {
+        filtersPanel.hidden = !open;
+        filterToggleButton.setAttribute('aria-expanded', String(open));
+      }
+
+      function rowMatchesFilters(row) {
+        if (filterState.age && getCellValue(row, filterIndexes.age) !== filterState.age) return false;
+        if (filterState.gender && getCellValue(row, filterIndexes.gender) !== filterState.gender) return false;
+        return true;
+      }
+
+      function getVisibleRows() {
+        return currentRows
+          .map((row, rowIndex) => ({ row, rowIndex }))
+          .filter((item) => rowMatchesFilters(item.row));
+      }
+
+      function applyFilters(note = '') {
+        renderTableRows();
+        renderSummary(note || (hasActiveFilters() ? 'đang lọc dữ liệu' : 'đã bỏ lọc'));
+        updateFilterToggleText();
+      }
+
+      function stopEnterNewline(event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
+      }
+
+      function markDirty() {
+        dirty = true;
+        if (saveButton.hidden) return;
+        saveButton.textContent = 'Lưu chỉnh sửa *';
+      }
+
+      function renderSummary(note = '') {
+        if (!currentData) return;
+
+        const visibleCount = getVisibleRows().length;
+        const filterText = hasActiveFilters()
+          ? `đang lọc ${visibleCount}/${currentRows.length} dòng`
+          : `đang hiển thị/sửa ${currentRows.length} dòng`;
+
+        summary.textContent = `${currentData.fileName} | ${currentData.fileType} | ${currentData.sheetName} | ${currentRows.length} dòng dữ liệu | batch ${currentData.batchId || 'chưa có'} | ${filterText}${note ? ` | ${note}` : ''}`;
+      }
+
+      function renderTableRows() {
+        previewBody.innerHTML = '';
+
+        const visibleRows = getVisibleRows();
+        if (visibleRows.length === 0) {
+          const tr = document.createElement('tr');
+          const td = document.createElement('td');
+          td.className = 'empty-row';
+          td.colSpan = currentData.columns.length + 1;
+          td.textContent = 'Không có dòng nào khớp bộ lọc.';
+          tr.appendChild(td);
+          previewBody.appendChild(tr);
+          return;
+        }
+
+        visibleRows.forEach(({ row, rowIndex }) => {
+          const tr = document.createElement('tr');
+
+          currentData.columns.forEach((_, columnIndex) => {
+            const td = document.createElement('td');
+            td.contentEditable = 'true';
+            td.textContent = row[columnIndex] || '';
+            td.addEventListener('keydown', stopEnterNewline);
+            td.addEventListener('input', () => {
+              currentRows[rowIndex][columnIndex] = td.textContent.trim();
+              markDirty();
+            });
+            tr.appendChild(td);
+          });
+
+          const actionTd = document.createElement('td');
+          const deleteRowButton = document.createElement('button');
+          actionTd.className = 'row-action';
+          deleteRowButton.type = 'button';
+          deleteRowButton.className = 'danger';
+          deleteRowButton.textContent = 'Xoá dòng';
+          deleteRowButton.addEventListener('click', () => {
+            currentRows.splice(rowIndex, 1);
+            refreshFilterPanel();
+            renderTableRows();
+            renderSummary('chưa lưu thay đổi');
+            markDirty();
+          });
+          actionTd.appendChild(deleteRowButton);
+          tr.appendChild(actionTd);
+          previewBody.appendChild(tr);
+        });
+      }
+
+      function render(data, note = '') {
+        currentData = {
+          ...data,
+          columns: Array.isArray(data.columns) ? [...data.columns] : [],
+        };
+        currentRows = (Array.isArray(data.rows) ? data.rows : data.previewRows || []).map((row) => (
+          currentData.columns.map((_, index) => String(row[index] || '').trim())
+        ));
+        dirty = false;
+
+        previewHead.innerHTML = '';
+
+        const headRow = document.createElement('tr');
+        currentData.columns.forEach((column, columnIndex) => {
+          const th = document.createElement('th');
+          th.contentEditable = 'true';
+          th.textContent = column;
+          th.addEventListener('keydown', stopEnterNewline);
+          th.addEventListener('input', () => {
+            currentData.columns[columnIndex] = th.textContent.trim() || `Cột ${columnIndex + 1}`;
+            markDirty();
+          });
+          th.addEventListener('blur', () => {
+            refreshFilterPanel();
+            renderTableRows();
+            renderSummary('chưa lưu thay đổi');
+          });
+          headRow.appendChild(th);
+        });
+        const actionTh = document.createElement('th');
+        actionTh.className = 'row-action';
+        actionTh.textContent = 'Thao tác';
+        headRow.appendChild(actionTh);
+        previewHead.appendChild(headRow);
+
+        refreshFilterPanel();
+        renderTableRows();
+        renderSummary(note);
+        previewWrap.hidden = false;
+        saveButton.hidden = false;
+        addRowButton.hidden = false;
+        deleteBatchButton.hidden = !currentData.batchId;
+        saveButton.textContent = 'Lưu chỉnh sửa';
+      }
+
+      function renderSessionFallback(note) {
+        if (!raw) return false;
+
+        try {
+          render(JSON.parse(raw), note);
+          return true;
+        } catch (error) {
+          return false;
+        }
+      }
+
+      async function loadPreview() {
+        if (batchId) {
+          try {
+            const response = await fetch(`/api/imports/athletes/${encodeURIComponent(batchId)}`);
+            const data = await response.json();
+
+            if (!response.ok) {
+              if (renderSessionFallback('đang hiển thị bản preview tạm; hãy restart server để dùng dữ liệu SQLite')) {
+                return;
+              }
+
+              summary.textContent = `${data.error || 'Không tải được batch import.'} Hãy tắt server bằng Control + C rồi chạy lại HOST=0.0.0.0 npm start.`;
+              return;
+            }
+
+            render(data);
+          } catch (error) {
+            if (renderSessionFallback('đang hiển thị bản preview tạm; hãy restart server để dùng dữ liệu SQLite')) {
+              return;
+            }
+
+            summary.textContent = `Không tải được dữ liệu import: ${error.message}`;
+            return;
+          }
+
+          return;
+        }
+
+        if (!raw) {
+          summary.innerHTML = 'Chưa có dữ liệu preview. Quay lại màn Import để chọn file.';
+          return;
+        }
+
+        render(JSON.parse(raw));
+      }
+
+      addRowButton.addEventListener('click', () => {
+        if (!currentData) return;
+        const newRow = currentData.columns.map(() => '');
+
+        Object.entries(filterIndexes).forEach(([field, columnIndex]) => {
+          if (columnIndex >= 0 && filterState[field]) {
+            newRow[columnIndex] = filterState[field];
+          }
+        });
+
+        currentRows.push(newRow);
+        refreshFilterPanel();
+        renderTableRows();
+        renderSummary('chưa lưu thay đổi');
+        markDirty();
+      });
+
+      filterToggleButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        setFilterPanelOpen(filtersPanel.hidden);
+      });
+
+      filtersPanel.addEventListener('click', (event) => {
+        event.stopPropagation();
+      });
+
+      document.addEventListener('click', () => {
+        setFilterPanelOpen(false);
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          setFilterPanelOpen(false);
+        }
+      });
+
+      ageFilter.addEventListener('change', () => {
+        filterState.age = ageFilter.value;
+        applyFilters();
+      });
+
+      genderFilter.addEventListener('change', () => {
+        filterState.gender = genderFilter.value;
+        applyFilters();
+      });
+
+      clearFiltersButton.addEventListener('click', () => {
+        filterState.age = '';
+        filterState.gender = '';
+        refreshFilterPanel();
+        applyFilters('đã bỏ lọc');
+      });
+
+      saveButton.addEventListener('click', async () => {
+        if (!currentData?.batchId) {
+          summary.textContent = 'Batch này chưa có mã lưu SQLite nên chưa thể lưu chỉnh sửa.';
+          return;
+        }
+
+        saveButton.disabled = true;
+        saveButton.textContent = 'Đang lưu...';
+
+        const response = await fetch(`/api/imports/athletes/${encodeURIComponent(currentData.batchId)}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            columns: currentData.columns,
+            rows: currentRows,
+          }),
+        });
+        const data = await response.json();
+
+        saveButton.disabled = false;
+
+        if (!response.ok) {
+          summary.textContent = data.error || 'Không lưu được chỉnh sửa.';
+          saveButton.textContent = 'Lưu chỉnh sửa *';
+          return;
+        }
+
+        sessionStorage.setItem('athleteImportPreview', JSON.stringify(data));
+        render(data, 'đã lưu chỉnh sửa vào SQLite');
+      });
+
+      deleteBatchButton.addEventListener('click', async () => {
+        if (!currentData?.batchId) return;
+
+        const ok = window.confirm(`Xoá toàn bộ batch "${currentData.fileName}" khỏi SQLite?`);
+        if (!ok) return;
+
+        deleteBatchButton.disabled = true;
+        deleteBatchButton.textContent = 'Đang xoá...';
+
+        const response = await fetch(`/api/imports/athletes/${encodeURIComponent(currentData.batchId)}`, {
+          method: 'DELETE',
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          deleteBatchButton.disabled = false;
+          deleteBatchButton.textContent = 'Xoá batch';
+          summary.textContent = data.error || 'Không xoá được batch.';
+          return;
+        }
+
+        sessionStorage.removeItem('athleteImportPreview');
+        window.location.href = '/import.html';
+      });
+
+      loadPreview();
+    </script>
+  </body>
+</html>

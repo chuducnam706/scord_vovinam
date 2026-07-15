@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MC điều phối sân</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #07111f;
+        color: #f8fafc;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 20px;
+        background: #0f172a;
+        border-bottom: 1px solid #334155;
+      }
+      h1, h2, h3 { margin: 0; }
+      h1 { font-size: 30px; }
+      .muted { color: #94a3b8; }
+      a, button {
+        display: grid;
+        place-items: center;
+        min-height: 44px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #fff;
+        text-decoration: none;
+        font-size: 15px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      button.secondary, a.secondary { background: #334155; }
+      button.success { background: #16a34a; }
+      button.warning { background: #f97316; }
+      button.danger { background: #dc2626; }
+      button:disabled { opacity: .55; cursor: not-allowed; }
+      main {
+        display: grid;
+        gap: 16px;
+        padding: 16px;
+      }
+      .status {
+        padding: 12px 14px;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        background: #0f172a;
+        color: #cbd5e1;
+      }
+      .status.ok { border-color: #22c55e; background: #052e16; color: #dcfce7; }
+      .status.error { border-color: #ef4444; background: #450a0a; color: #fee2e2; }
+      .layout {
+        display: grid;
+        grid-template-columns: 360px minmax(0, 1fr);
+        gap: 16px;
+      }
+      .panel {
+        display: grid;
+        gap: 14px;
+        padding: 16px;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        background: #0f172a;
+      }
+      .court-grid {
+        display: grid;
+        gap: 10px;
+      }
+      .court-card {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        background: #111827;
+        cursor: pointer;
+      }
+      .court-card.active { border-color: #38bdf8; background: #172033; }
+      .court-card.performance { border-color: #7c3aed; }
+      .court-card.combat { border-color: #2563eb; }
+      .court-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+      }
+      .badge {
+        width: fit-content;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #334155;
+        color: #e2e8f0;
+        font-size: 12px;
+        font-weight: 900;
+      }
+      .badge.performance { background: #6d28d9; color: #ede9fe; }
+      .badge.combat { background: #1d4ed8; color: #dbeafe; }
+      .badge.empty { background: #166534; color: #dcfce7; }
+      .control-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 14px;
+        font-weight: 800;
+        color: #cbd5e1;
+      }
+      select {
+        min-height: 44px;
+        width: 100%;
+        padding: 0 10px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #020617;
+        color: #f8fafc;
+        font-size: 15px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+      }
+      .summary-card {
+        padding: 12px;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        background: #111827;
+      }
+      .summary-card strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 24px;
+      }
+      .queue-wrap {
+        overflow: auto;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        background: #020617;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        padding: 10px;
+        border-bottom: 1px solid #1e293b;
+        text-align: left;
+        vertical-align: top;
+      }
+      th { background: #111827; }
+      .status-chip {
+        width: fit-content;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 900;
+      }
+      .status-chip.pending { background: #334155; color: #e2e8f0; }
+      .status-chip.calling { background: #b45309; color: #fffbeb; }
+      .status-chip.in_progress { background: #7c3aed; color: #ede9fe; }
+      .status-chip.completed { background: #166534; color: #dcfce7; }
+      .status-chip.skipped { background: #991b1b; color: #fee2e2; }
+      .row-actions {
+        display: flex;
+        gap: 6px;
+      }
+      .row-actions button {
+        min-height: 34px;
+        min-width: 34px;
+        padding: 0 10px;
+      }
+      @media (max-width: 980px) {
+        header, .layout { display: grid; grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>MC / Điều phối sân</h1>
+        <div class="muted">Bản thử đồng bộ theo sân. Hiện ưu tiên nạp danh sách hội diễn đã lưu, rồi gọi từng mục theo thứ tự.</div>
+      </div>
+      <div class="actions">
+        <a class="secondary" href="/performance-planner.html">Xếp hội diễn</a>
+        <a class="secondary" href="/">Dashboard</a>
+      </div>
+    </header>
+
+    <main>
+      <div class="status" id="status">Đang tải dữ liệu MC...</div>
+
+      <div class="layout">
+        <section class="panel">
+          <h2>6 sân</h2>
+          <div class="muted">Chọn sân để điều phối. Sân nào đang là hội diễn thì có thể nạp danh sách từ màn Xếp hội diễn.</div>
+          <div class="court-grid" id="courtGrid"></div>
+        </section>
+
+        <section class="panel">
+          <div class="control-top">
+            <div>
+              <h2 id="selectedTitle">Sân --</h2>
+              <div class="muted" id="selectedSubtitle">Đang tải trạng thái sân...</div>
+            </div>
+            <div class="actions">
+              <a id="readerLink" href="#">Màn MC đọc</a>
+              <a class="secondary" id="boardLink" href="#">Bảng điểm sân</a>
+            </div>
+          </div>
+
+          <div class="grid">
+            <label>
+              Danh sách hội diễn đã lưu
+              <select id="scheduleSelect"></select>
+            </label>
+          </div>
+
+          <div class="actions">
+            <button id="loadScheduleButton" type="button">Nạp vào sân</button>
+            <button class="secondary" id="announceButton" type="button">Gọi mục tiếp theo</button>
+            <button class="success" id="startButton" type="button">Bắt đầu thi</button>
+            <button class="warning" id="completeButton" type="button">Hoàn thành</button>
+            <button class="danger" id="skipButton" type="button">Bỏ qua</button>
+            <button class="secondary" id="resetButton" type="button">Reset hàng chờ</button>
+          </div>
+
+          <div class="summary-grid">
+            <div class="summary-card">
+              Đang gọi / đang thi
+              <strong id="currentName">Chưa có</strong>
+              <div class="muted" id="currentMeta">Chưa nạp danh sách.</div>
+            </div>
+            <div class="summary-card">
+              Mục tiếp theo
+              <strong id="nextName">Chưa có</strong>
+              <div class="muted" id="nextMeta">--</div>
+            </div>
+            <div class="summary-card">
+              Tiến độ sân
+              <strong id="progressValue">0 / 0</strong>
+              <div class="muted" id="progressMeta">0 hoàn thành, 0 bỏ qua.</div>
+            </div>
+          </div>
+
+          <div class="queue-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>VĐV / Đội</th>
+                  <th>Đơn vị</th>
+                  <th>Trạng thái</th>
+                  <th>Đổi thứ tự</th>
+                </tr>
+              </thead>
+              <tbody id="queueBody">
+                <tr>
+                  <td colspan="5">Chưa có dữ liệu.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const courtGrid = document.getElementById('courtGrid');
+      const statusEl = document.getElementById('status');
+      const scheduleSelect = document.getElementById('scheduleSelect');
+      const loadScheduleButton = document.getElementById('loadScheduleButton');
+      const announceButton = document.getElementById('announceButton');
+      const startButton = document.getElementById('startButton');
+      const completeButton = document.getElementById('completeButton');
+      const skipButton = document.getElementById('skipButton');
+      const resetButton = document.getElementById('resetButton');
+      const selectedTitle = document.getElementById('selectedTitle');
+      const selectedSubtitle = document.getElementById('selectedSubtitle');
+      const readerLink = document.getElementById('readerLink');
+      const boardLink = document.getElementById('boardLink');
+      const currentName = document.getElementById('currentName');
+      const currentMeta = document.getElementById('currentMeta');
+      const nextName = document.getElementById('nextName');
+      const nextMeta = document.getElementById('nextMeta');
+      const progressValue = document.getElementById('progressValue');
+      const progressMeta = document.getElementById('progressMeta');
+      const queueBody = document.getElementById('queueBody');
+
+      const params = new URLSearchParams(window.location.search);
+      let selectedCourt = params.get('court') || '1';
+      let courts = [];
+      let performanceSchedules = [];
+      let selectedCourtDetail = null;
+      let overviewEvents = null;
+      let courtEvents = null;
+
+      const statusLabels = {
+        pending: 'Chờ gọi',
+        calling: 'Đang gọi',
+        in_progress: 'Đang thi',
+        completed: 'Đã xong',
+        skipped: 'Bỏ qua',
+      };
+
+      function setStatus(message, type = '') {
+        statusEl.textContent = message;
+        statusEl.className = `status ${type}`.trim();
+      }
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function fillSchedules() {
+        scheduleSelect.innerHTML = '';
+        const first = document.createElement('option');
+        first.value = '';
+        first.textContent = 'Chọn danh sách hội diễn đã lưu';
+        scheduleSelect.appendChild(first);
+
+        performanceSchedules.forEach((schedule) => {
+          const option = document.createElement('option');
+          option.value = schedule.groupId;
+          option.textContent = `${schedule.ageGroup} - ${schedule.routineName} | ${schedule.totalEntries} mục`;
+          scheduleSelect.appendChild(option);
+        });
+      }
+
+      function badgeClass(mode, assigned) {
+        if (!assigned) return 'empty';
+        return mode || '';
+      }
+
+      function renderCourts() {
+        courtGrid.innerHTML = '';
+
+        courts.forEach((court) => {
+          const card = document.createElement('button');
+          card.type = 'button';
+          card.className = `court-card ${court.mode || ''} ${court.court === selectedCourt ? 'active' : ''}`.trim();
+          card.innerHTML = `
+            <div class="court-row">
+              <strong>Sân ${escapeHtml(court.court)}</strong>
+              <div class="badge ${badgeClass(court.mode, court.assigned)}">${escapeHtml(court.modeLabel)}</div>
+            </div>
+            <div>${court.title ? escapeHtml(court.title) : 'Chưa nạp danh sách MC'}</div>
+            <div class="muted">${court.currentItem ? `Hiện tại: ${escapeHtml(court.currentItem.displayName)}` : 'Chưa có mục đang gọi'}</div>
+            <div class="muted">${court.nextItems?.[0] ? `Tiếp theo: ${escapeHtml(court.nextItems[0].displayName)}` : 'Không có mục tiếp theo'}</div>
+          `;
+          card.addEventListener('click', () => {
+            selectedCourt = court.court;
+            connectCourtEvents();
+            renderCourts();
+            loadCourtDetail();
+          });
+          courtGrid.appendChild(card);
+        });
+      }
+
+      function updateLinks(court) {
+        readerLink.href = `/mc-reader.html?court=${encodeURIComponent(court.court)}`;
+        if (court.mode === 'performance') {
+          const matchId = court.matchId || `PERFORMANCE_COURT_${court.court}`;
+          boardLink.href = `/performance-board.html?court=${encodeURIComponent(court.court)}&matchId=${encodeURIComponent(matchId)}`;
+        } else {
+          const matchId = court.matchId || `COURT_${court.court}`;
+          boardLink.href = `/board.html?court=${encodeURIComponent(court.court)}&matchId=${encodeURIComponent(matchId)}`;
+        }
+      }
+
+      function renderCourtDetail() {
+        const court = selectedCourtDetail || {
+          court: selectedCourt,
+          modeLabel: 'Trống',
+          title: '',
+          queue: [],
+          nextItems: [],
+          currentItem: null,
+          completedCount: 0,
+          skippedCount: 0,
+          totalItems: 0,
+        };
+
+        selectedTitle.textContent = `Sân ${court.court}`;
+        selectedSubtitle.textContent = `${court.modeLabel}${court.title ? ` • ${court.title}` : ' • Chưa nạp danh sách MC'}`;
+        updateLinks(court);
+
+        const canLoadPerformance = !court.mode || court.mode === 'performance';
+        loadScheduleButton.disabled = !canLoadPerformance || !scheduleSelect.value;
+        scheduleSelect.disabled = !canLoadPerformance || performanceSchedules.length === 0;
+
+        const current = court.currentItem;
+        const next = court.nextItems?.[0] || null;
+
+        currentName.textContent = current ? current.displayName : 'Chưa có';
+        currentMeta.textContent = current
+          ? `${statusLabels[current.status] || current.status} • ${current.unit || 'Chưa có đơn vị'}`
+          : (court.title ? 'Bấm “Gọi mục tiếp theo” để bắt đầu.' : 'Chưa nạp danh sách.');
+        nextName.textContent = next ? next.displayName : 'Chưa có';
+        nextMeta.textContent = next ? `${next.unit || 'Chưa có đơn vị'} • ${next.routineName || '--'}` : '--';
+        progressValue.textContent = `${court.completedCount || 0} / ${court.totalItems || 0}`;
+        progressMeta.textContent = `${court.completedCount || 0} hoàn thành, ${court.skippedCount || 0} bỏ qua.`;
+
+        announceButton.disabled = !court.totalItems || Boolean(current);
+        startButton.disabled = !court.totalItems || !court.currentItem || court.currentItem.status === 'in_progress';
+        completeButton.disabled = !court.currentItem;
+        skipButton.disabled = !court.totalItems;
+        resetButton.disabled = !court.totalItems;
+
+        queueBody.innerHTML = '';
+        const queue = court.queue || [];
+        if (!queue.length) {
+          queueBody.innerHTML = '<tr><td colspan="5">Sân này chưa có danh sách MC.</td></tr>';
+          return;
+        }
+
+        queue.forEach((item, index) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${index + 1}</td>
+            <td>
+              <div><strong>${escapeHtml(item.displayName)}</strong></div>
+              <div class="muted">${escapeHtml(item.ageGroup || '')} ${item.routineName ? `• ${escapeHtml(item.routineName)}` : ''}</div>
+            </td>
+            <td>${escapeHtml(item.unit || '')}</td>
+            <td><div class="status-chip ${escapeHtml(item.status)}">${escapeHtml(statusLabels[item.status] || item.status)}</div></td>
+            <td>
+              <div class="row-actions">
+                <button class="secondary" type="button" data-direction="up" ${index === 0 ? 'disabled' : ''}>↑</button>
+                <button class="secondary" type="button" data-direction="down" ${index === queue.length - 1 ? 'disabled' : ''}>↓</button>
+              </div>
+            </td>
+          `;
+
+          tr.querySelectorAll('button[data-direction]').forEach((button) => {
+            button.addEventListener('click', () => reorderItem(item.itemId, button.dataset.direction));
+          });
+
+          queueBody.appendChild(tr);
+        });
+      }
+
+      async function loadSchedules() {
+        const response = await fetch('/api/performance/planner/schedules');
+        const data = await response.json();
+        performanceSchedules = data.schedules || [];
+        fillSchedules();
+      }
+
+      async function loadCourts() {
+        const response = await fetch('/api/mc/courts');
+        const data = await response.json();
+        courts = data.courts || [];
+        renderCourts();
+      }
+
+      async function loadCourtDetail() {
+        const response = await fetch(`/api/mc/courts/${encodeURIComponent(selectedCourt)}`);
+        const data = await response.json();
+        selectedCourtDetail = data;
+        renderCourtDetail();
+      }
+
+      async function postCourtAction(action, payload = {}) {
+        const response = await fetch(`/api/mc/courts/${encodeURIComponent(selectedCourt)}/${action}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          setStatus(data.error || 'Không thao tác được với sân này.', 'error');
+          return null;
+        }
+
+        if (data.court) {
+          selectedCourtDetail = data.court;
+          renderCourtDetail();
+        }
+        await loadCourts();
+        return data;
+      }
+
+      async function loadScheduleToCourt() {
+        if (!scheduleSelect.value) {
+          setStatus('Chọn một danh sách hội diễn đã lưu trước.', 'error');
+          return;
+        }
+
+        setStatus(`Đang nạp danh sách vào Sân ${selectedCourt}...`);
+        const result = await postCourtAction('load-performance', { groupId: scheduleSelect.value });
+        if (!result) return;
+        setStatus(`Đã nạp danh sách hội diễn vào Sân ${selectedCourt}.`, 'ok');
+      }
+
+      async function reorderItem(itemId, direction) {
+        const result = await postCourtAction('reorder', { itemId, direction });
+        if (!result) return;
+        setStatus(`Đã đổi thứ tự mục trên Sân ${selectedCourt}.`, 'ok');
+      }
+
+      function connectOverviewEvents() {
+        if (overviewEvents) overviewEvents.close();
+        overviewEvents = new EventSource('/api/events?type=mc-overview');
+        overviewEvents.addEventListener('mcOverview', (event) => {
+          const data = JSON.parse(event.data);
+          courts = data.courts || [];
+          renderCourts();
+        });
+      }
+
+      function connectCourtEvents() {
+        if (courtEvents) courtEvents.close();
+        courtEvents = new EventSource(`/api/events?type=mc&court=${encodeURIComponent(selectedCourt)}`);
+        courtEvents.addEventListener('mcSnapshot', (event) => {
+          selectedCourtDetail = JSON.parse(event.data);
+          renderCourtDetail();
+        });
+      }
+
+      scheduleSelect.addEventListener('change', renderCourtDetail);
+      loadScheduleButton.addEventListener('click', loadScheduleToCourt);
+      announceButton.addEventListener('click', async () => {
+        const result = await postCourtAction('announce-next');
+        if (result) setStatus(`Đã gọi mục tiếp theo trên Sân ${selectedCourt}.`, 'ok');
+      });
+      startButton.addEventListener('click', async () => {
+        const result = await postCourtAction('start');
+        if (result) setStatus(`Đã chuyển Sân ${selectedCourt} sang trạng thái đang thi.`, 'ok');
+      });
+      completeButton.addEventListener('click', async () => {
+        const result = await postCourtAction('complete');
+        if (result) setStatus(`Đã hoàn thành mục hiện tại của Sân ${selectedCourt}.`, 'ok');
+      });
+      skipButton.addEventListener('click', async () => {
+        const result = await postCourtAction('skip');
+        if (result) setStatus(`Đã bỏ qua mục hiện tại của Sân ${selectedCourt}.`, 'ok');
+      });
+      resetButton.addEventListener('click', async () => {
+        const ok = window.confirm(`Reset toàn bộ hàng chờ MC của Sân ${selectedCourt} về trạng thái chờ gọi?`);
+        if (!ok) return;
+        const result = await postCourtAction('reset');
+        if (result) setStatus(`Đã reset hàng chờ MC của Sân ${selectedCourt}.`, 'ok');
+      });
+
+      async function bootstrap() {
+        connectOverviewEvents();
+        connectCourtEvents();
+        await Promise.all([loadSchedules(), loadCourts(), loadCourtDetail()]);
+        setStatus('Đã tải xong module MC điều phối sân.', 'ok');
+      }
+
+      bootstrap().catch((error) => {
+        setStatus(`Không tải được dữ liệu MC: ${error.message}`, 'error');
+      });
+    </script>
+  </body>
+</html>

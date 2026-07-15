@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bảng điểm hội diễn</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #020617;
+        color: #f8fafc;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 18px;
+        background: #0f172a;
+        border-bottom: 1px solid #334155;
+      }
+      h1 { margin: 0; font-size: 28px; }
+      .muted { color: #94a3b8; }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+      a,
+      button {
+        display: grid;
+        place-items: center;
+        min-height: 42px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #ffffff;
+        font-weight: 800;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      button.danger { background: #dc2626; }
+      .connection {
+        display: grid;
+        place-items: center;
+        min-height: 42px;
+        padding: 0 12px;
+        border-radius: 8px;
+        background: #334155;
+        color: #e2e8f0;
+      }
+      main {
+        display: grid;
+        gap: 16px;
+        padding: 16px;
+      }
+      .result {
+        display: grid;
+        gap: 10px;
+        min-height: 210px;
+        padding: 18px;
+        border-radius: 12px;
+        background: #4c1d95;
+        text-align: center;
+      }
+      .result-label {
+        color: #ddd6fe;
+        font-size: clamp(20px, 3vw, 34px);
+        font-weight: 900;
+      }
+      .result-value {
+        font-size: clamp(88px, 16vw, 190px);
+        font-weight: 1000;
+        line-height: 1;
+      }
+      .result-detail {
+        color: #ddd6fe;
+        font-size: clamp(16px, 2.5vw, 24px);
+        font-weight: 800;
+      }
+      .judge-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 12px;
+      }
+      .judge-card {
+        display: grid;
+        gap: 10px;
+        min-height: 190px;
+        padding: 14px;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        background: #0f172a;
+      }
+      .judge-card.counted {
+        border-color: #22c55e;
+        background: #052e16;
+        animation: countedBlink 0.9s ease-in-out infinite;
+      }
+      .judge-card.counted .judge-score {
+        color: #dcfce7;
+        animation: countedScoreBlink 0.9s ease-in-out infinite;
+      }
+      .judge-card.counted .judge-note {
+        color: #ffffff;
+      }
+      .judge-card.excluded { border-color: #f97316; background: #431407; }
+      @keyframes countedBlink {
+        0%, 100% {
+          border-color: #22c55e;
+          background: #052e16;
+          box-shadow: 0 0 0 rgba(34, 197, 94, 0);
+        }
+        50% {
+          border-color: #facc15;
+          background: #14532d;
+          box-shadow: 0 0 28px rgba(250, 204, 21, 0.65);
+        }
+      }
+      @keyframes countedScoreBlink {
+        0%, 100% {
+          color: #dcfce7;
+          transform: scale(1);
+          text-shadow: none;
+        }
+        50% {
+          color: #fef08a;
+          transform: scale(1.05);
+          text-shadow: 0 0 18px rgba(250, 204, 21, 0.85);
+        }
+      }
+      .judge-title {
+        color: #cbd5e1;
+        font-size: 18px;
+        font-weight: 900;
+      }
+      .judge-device {
+        color: #94a3b8;
+        font-size: 14px;
+      }
+      .judge-score {
+        align-self: center;
+        text-align: center;
+        font-size: clamp(46px, 8vw, 90px);
+        font-weight: 1000;
+      }
+      .judge-note {
+        min-height: 22px;
+        color: #fde68a;
+        font-weight: 800;
+        text-align: center;
+      }
+      .schedule-panel {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        background: #0f172a;
+      }
+      .schedule-panel h2 {
+        margin: 0;
+        font-size: 22px;
+      }
+      .schedule-card {
+        padding: 14px;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        background: #111827;
+      }
+      .schedule-card strong {
+        display: block;
+        margin: 8px 0 6px;
+        font-size: 26px;
+      }
+      .entry-state {
+        width: fit-content;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 900;
+      }
+      .entry-state.pending {
+        background: #ca8a04;
+        color: #111827;
+      }
+      .entry-state.in_progress {
+        background: #16a34a;
+        color: #f0fdf4;
+      }
+      .entry-state.completed {
+        background: #dc2626;
+        color: #fef2f2;
+      }
+      .entry-name {
+        font-size: clamp(32px, 5vw, 54px);
+        font-weight: 1000;
+        line-height: 1.05;
+      }
+      .entry-meta {
+        color: #cbd5e1;
+        font-size: clamp(18px, 2.1vw, 26px);
+        font-weight: 800;
+      }
+      .entry-submeta {
+        color: #94a3b8;
+        font-size: 16px;
+      }
+      @media (max-width: 960px) {
+        header { display: grid; }
+        .judge-grid { grid-template-columns: repeat(2, 1fr); }
+      }
+      @media (max-width: 560px) {
+        .judge-grid { grid-template-columns: 1fr; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .judge-card.counted,
+        .judge-card.counted .judge-score {
+          animation: none;
+        }
+        .judge-card.counted {
+          border-color: #facc15;
+          box-shadow: 0 0 22px rgba(250, 204, 21, 0.5);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1 id="title">Bảng điểm hội diễn</h1>
+        <div class="muted" id="subtitle">Đang tải...</div>
+      </div>
+      <div class="actions">
+        <a id="courtLink" href="#">Sân</a>
+        <button class="danger" id="resetButton" type="button">Reset</button>
+        <div class="connection" id="connection">Đang kết nối</div>
+      </div>
+    </header>
+
+    <main>
+      <section class="result">
+        <div class="result-label">Kết quả tổng 3 trọng tài giữa</div>
+        <div class="result-value" id="resultValue">--</div>
+        <div class="result-detail" id="resultDetail">Chờ 5 trọng tài gửi điểm</div>
+      </section>
+
+      <section class="judge-grid" id="judgeGrid"></section>
+
+      <section class="schedule-panel">
+        <h2>Dữ liệu hội diễn đã sắp xếp</h2>
+        <div class="schedule-card">
+          <div class="entry-state" id="entryState">Chưa có dữ liệu</div>
+          <div class="entry-name" id="entryName">Đang tự tìm danh sách</div>
+          <div class="entry-meta" id="entryUnit">Đơn vị: --</div>
+          <div class="entry-meta" id="entryRoutine">Bài thi: --</div>
+          <div class="entry-submeta" id="entryMeta">Nội dung của sân này được gán ở màn Chia sân hội diễn. Khi đủ điểm thì TT tổng bấm Next ở màn điều khiển.</div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const court = params.get('court') || '1';
+      const matchId = params.get('matchId') || `PERFORMANCE_COURT_${court}`;
+      const judgeGrid = document.getElementById('judgeGrid');
+      const resultValue = document.getElementById('resultValue');
+      const resultDetail = document.getElementById('resultDetail');
+      const connection = document.getElementById('connection');
+      const resetButton = document.getElementById('resetButton');
+      const entryState = document.getElementById('entryState');
+      const entryName = document.getElementById('entryName');
+      const entryUnit = document.getElementById('entryUnit');
+      const entryRoutine = document.getElementById('entryRoutine');
+      const entryMeta = document.getElementById('entryMeta');
+      let scoreDecimals = 0;
+
+      document.getElementById('title').textContent = `Bảng điểm hội diễn - Sân ${court}`;
+      document.getElementById('subtitle').textContent = `Mã bài thi: ${matchId}`;
+      document.getElementById('courtLink').href = `/performance-court.html?court=${encodeURIComponent(court)}&matchId=${encodeURIComponent(matchId)}`;
+
+      function formatScore(value) {
+        return Number.isFinite(Number(value)) ? Number(value).toFixed(scoreDecimals) : '--';
+      }
+
+      function updateEntryInfo(label, status, name, unit, routine, meta) {
+        entryState.textContent = label;
+        entryState.className = `entry-state ${status}`.trim();
+        entryName.textContent = name;
+        entryUnit.textContent = `Đơn vị: ${unit || '--'}`;
+        entryRoutine.textContent = `Bài thi: ${routine || '--'}`;
+        entryMeta.textContent = meta;
+      }
+
+      function renderDisplay(display) {
+        if (!display || !display.hasSchedule) {
+          updateEntryInfo(
+            'Chưa có dữ liệu',
+            '',
+            'Sân này chưa được phân nội dung',
+            '--',
+            '--',
+            'Hãy gán nội dung cho sân này ở màn Chia sân hội diễn.',
+          );
+          return;
+        }
+
+        if (!display.currentEntry) {
+          updateEntryInfo(
+            'Chưa có dữ liệu',
+            '',
+            display.title || 'Danh sách hội diễn',
+            '--',
+            display.schedule?.routineName || '--',
+            display.currentMeta || 'Danh sách này chưa có mục thi hợp lệ.',
+          );
+          return;
+        }
+
+        updateEntryInfo(
+          display.currentLabel,
+          display.currentStatus,
+          display.currentEntry.displayName || 'Chưa có tên',
+          display.currentEntry.unit || '--',
+          display.currentEntry.routineName || display.schedule?.routineName || '--',
+          display.currentMeta,
+        );
+      }
+
+      function judgeResultType(result, judgeId) {
+        if (!result?.ready) return { className: '', note: 'Chờ kết quả' };
+
+        const excluded = result.excludedScores.find((item) => Number(item.judgeId) === Number(judgeId));
+        if (excluded) {
+          return {
+            className: 'excluded',
+            note: excluded.reason === 'highest' ? 'Bỏ cao nhất' : 'Bỏ thấp nhất',
+          };
+        }
+
+        const counted = result.countedScores.find((item) => Number(item.judgeId) === Number(judgeId));
+        if (counted) return { className: 'counted', note: 'Được tính' };
+        return { className: '', note: '' };
+      }
+
+      function render(match) {
+        const result = match.result;
+        scoreDecimals = Number(match.config?.scoreDecimals ?? 0);
+        judgeGrid.innerHTML = '';
+
+        for (let i = 1; i <= match.config.judgeCount; i += 1) {
+          const score = match.judgeScores?.[i] ?? match.judgeScores?.[String(i)];
+          const device = match.judgeDevices?.[i] ?? match.judgeDevices?.[String(i)] ?? `Máy ${i}`;
+          const type = judgeResultType(result, i);
+          const card = document.createElement('div');
+          card.className = `judge-card ${type.className}`.trim();
+          card.innerHTML = `
+            <div>
+              <div class="judge-title">Trọng tài ${i}</div>
+              <div class="judge-device">${device}</div>
+            </div>
+            <div class="judge-score">${formatScore(score)}</div>
+            <div class="judge-note">${type.note}</div>
+          `;
+          judgeGrid.appendChild(card);
+        }
+
+        if (result.ready) {
+          resultValue.textContent = formatScore(result.total);
+          const counted = result.countedScores.map((item) => `TT${item.judgeId}: ${formatScore(item.score)}`).join(' + ');
+          const excluded = result.excludedScores.map((item) => `TT${item.judgeId}: ${formatScore(item.score)}`).join(', ');
+          resultDetail.textContent = `Tính ${counted}. Bỏ ${excluded}.`;
+        } else {
+          resultValue.textContent = '--';
+          resultDetail.textContent = `Đã có ${result.submittedCount}/${result.requiredCount} trọng tài gửi điểm`;
+        }
+      }
+
+      async function loadSnapshot() {
+        const response = await fetch(`/api/performance/matches/${encodeURIComponent(matchId)}?court=${encodeURIComponent(court)}`);
+        const data = await response.json();
+        render(data);
+      }
+
+      resetButton.addEventListener('click', async () => {
+        const ok = window.confirm('Reset toàn bộ điểm hội diễn của sân này?');
+        if (!ok) return;
+
+        const response = await fetch(`/api/performance/matches/${encodeURIComponent(matchId)}/reset?court=${encodeURIComponent(court)}`, {
+          method: 'POST',
+        });
+        const data = await response.json();
+        render(data);
+      });
+
+      const events = new EventSource(`/api/events?type=performance&court=${encodeURIComponent(court)}&matchId=${encodeURIComponent(matchId)}`);
+      const displayEvents = new EventSource(`/api/events?type=performance-court-display&court=${encodeURIComponent(court)}`);
+
+      events.addEventListener('open', () => {
+        connection.textContent = 'Đã kết nối';
+      });
+
+      events.addEventListener('error', () => {
+        connection.textContent = 'Mất kết nối';
+      });
+
+      events.addEventListener('performanceSnapshot', (event) => {
+        render(JSON.parse(event.data));
+      });
+
+      displayEvents.addEventListener('performanceCourtDisplaySnapshot', (event) => {
+        renderDisplay(JSON.parse(event.data));
+      });
+
+      loadSnapshot().catch(() => {
+        connection.textContent = 'Không tải được';
+      });
+
+      fetch(`/api/performance/courts/${encodeURIComponent(court)}/display`)
+        .then((response) => response.json())
+        .then(renderDisplay)
+        .catch(() => renderDisplay(null));
+    </script>
+  </body>
+</html>

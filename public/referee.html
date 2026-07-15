@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trọng tài chấm điểm</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #0f172a;
+        color: white;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 18px;
+        background: #111827;
+        border-bottom: 1px solid #334155;
+      }
+
+      .meta {
+        display: grid;
+        gap: 4px;
+      }
+
+      .title {
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .muted {
+        color: #94a3b8;
+        font-size: 14px;
+      }
+
+      .status {
+        align-self: center;
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: #1e293b;
+        color: #e2e8f0;
+        text-align: right;
+      }
+
+      .status.ok {
+        background: #166534;
+        color: #dcfce7;
+      }
+
+      .status.warn {
+        background: #854d0e;
+        color: #fef3c7;
+      }
+
+      .status.error {
+        background: #7f1d1d;
+        color: #fee2e2;
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .header-link {
+        display: grid;
+        place-items: center;
+        min-height: 38px;
+        padding: 0 12px;
+        border-radius: 8px;
+        background: #334155;
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      body.selecting .header-link {
+        display: none;
+      }
+
+      body.selecting main {
+        display: none;
+      }
+
+      body.scoring .select-screen {
+        display: none;
+      }
+
+      .select-screen {
+        display: grid;
+        place-items: center;
+        min-height: calc(100vh - 74px);
+        padding: 18px;
+      }
+
+      .select-card {
+        width: min(720px, 100%);
+        padding: 22px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #111827;
+      }
+
+      .select-card h1 {
+        margin: 0 0 8px;
+        font-size: 30px;
+      }
+
+      .select-card p {
+        margin: 0 0 18px;
+        color: #94a3b8;
+      }
+
+      .judge-picker {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 18px;
+        font-size: 16px;
+        color: #cbd5e1;
+      }
+
+      .judge-picker select {
+        min-height: 52px;
+        padding: 0 14px;
+        border: 1px solid #475569;
+        border-radius: 8px;
+        background: #0f172a;
+        color: #f8fafc;
+        font-size: 18px;
+      }
+
+      .court-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+
+      .court-button {
+        min-height: 88px;
+        background: #2563eb;
+        color: #ffffff;
+        font-size: clamp(24px, 6vw, 42px);
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        padding: 14px;
+        min-height: calc(100vh - 74px);
+      }
+
+      .fighter {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 18px;
+        padding: 18px;
+        border-radius: 8px;
+      }
+
+      .fighter.blue {
+        background: #1d4ed8;
+      }
+
+      .fighter.red {
+        background: #b91c1c;
+      }
+
+      .fighter.flash {
+        animation: flash 280ms ease-out;
+      }
+
+      .fighter h2 {
+        margin: 0;
+        text-align: center;
+        font-size: clamp(32px, 7vw, 72px);
+        letter-spacing: 0;
+      }
+
+      .buttons {
+        display: grid;
+        gap: 14px;
+        align-content: center;
+      }
+
+      button {
+        width: 100%;
+        min-height: 110px;
+        border: 0;
+        border-radius: 8px;
+        background: white;
+        color: #0f172a;
+        font-size: clamp(32px, 7vw, 68px);
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      button:active {
+        transform: scale(0.99);
+        background: #fef08a;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+
+      @keyframes flash {
+        0% {
+          background: #facc15;
+          color: #111827;
+        }
+
+        100% {
+          color: white;
+        }
+      }
+
+      @media (max-width: 760px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        button {
+          min-height: 88px;
+        }
+      }
+    </style>
+  </head>
+  <body class="selecting">
+    <header>
+      <div class="meta">
+        <div class="title" id="judgeTitle">Trọng tài</div>
+        <div class="muted" id="matchTitle">Trận</div>
+      </div>
+      <div class="header-actions">
+        <a class="header-link" id="chiefLink" href="#">Tổng tài</a>
+        <div class="status" id="status">Sẵn sàng</div>
+      </div>
+    </header>
+
+    <section class="select-screen" id="selectScreen">
+      <div class="select-card">
+        <h1>Chọn sân thi đấu</h1>
+        <p>Chọn đúng sân/thảm trước khi vào màn hình chấm điểm.</p>
+
+        <label class="judge-picker" for="judgeSelect">
+          <span>Số trọng tài</span>
+          <select id="judgeSelect">
+            <option value="1">Trọng tài 1</option>
+            <option value="2">Trọng tài 2</option>
+            <option value="3">Trọng tài 3</option>
+            <option value="4">Trọng tài 4</option>
+          </select>
+        </label>
+
+        <div class="court-grid">
+          <button class="court-button" data-court="1">Sân 1</button>
+          <button class="court-button" data-court="2">Sân 2</button>
+          <button class="court-button" data-court="3">Sân 3</button>
+          <button class="court-button" data-court="4">Sân 4</button>
+          <button class="court-button" data-court="5">Sân 5</button>
+          <button class="court-button" data-court="6">Sân 6</button>
+        </div>
+      </div>
+    </section>
+
+    <main>
+      <section class="fighter blue" id="bluePanel">
+        <h2>XANH</h2>
+        <div class="buttons">
+          <button data-side="blue" data-point="1">+1</button>
+          <button data-side="blue" data-point="2">+2</button>
+          <button data-side="blue" data-point="3">+3</button>
+        </div>
+      </section>
+
+      <section class="fighter red" id="redPanel">
+        <h2>ĐỎ</h2>
+        <div class="buttons">
+          <button data-side="red" data-point="1">+1</button>
+          <button data-side="red" data-point="2">+2</button>
+          <button data-side="red" data-point="3">+3</button>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const court = params.get('court') || '';
+      const matchId = params.get('matchId') || (court ? `COURT_${court}` : '');
+      const judgeId = Number(params.get('judgeId') || '1');
+      const statusEl = document.getElementById('status');
+      const bluePanel = document.getElementById('bluePanel');
+      const redPanel = document.getElementById('redPanel');
+      const scoreButtons = Array.from(document.querySelectorAll('button[data-side]'));
+      const judgeSelect = document.getElementById('judgeSelect');
+      const chiefLink = document.getElementById('chiefLink');
+
+      judgeSelect.value = String(judgeId);
+
+      function sideName(side) {
+        return side === 'blue' ? 'Xanh' : 'Đỏ';
+      }
+
+      function setStatus(message, tone = '') {
+        statusEl.textContent = message;
+        statusEl.className = `status ${tone}`.trim();
+      }
+
+      function setButtonsDisabled(disabled) {
+        scoreButtons.forEach((button) => {
+          button.disabled = disabled;
+        });
+      }
+
+      function flash(side) {
+        const panel = side === 'blue' ? bluePanel : redPanel;
+        panel.classList.remove('flash');
+        window.requestAnimationFrame(() => {
+          panel.classList.add('flash');
+        });
+      }
+
+      function openCourt(courtNumber) {
+        const next = new URL(window.location.href);
+        const selectedJudgeId = judgeSelect.value || '1';
+
+        next.searchParams.set('court', courtNumber);
+        next.searchParams.set('judgeId', selectedJudgeId);
+        next.searchParams.set('matchId', `COURT_${courtNumber}`);
+        window.location.href = next.toString();
+      }
+
+      document.querySelectorAll('button[data-court]').forEach((button) => {
+        button.addEventListener('click', () => {
+          openCourt(button.dataset.court);
+        });
+      });
+
+      if (!court) {
+        document.body.className = 'selecting';
+        document.getElementById('judgeTitle').textContent = 'Trọng tài';
+        document.getElementById('matchTitle').textContent = 'Chọn sân trước khi chấm';
+        setStatus('Chọn sân');
+      } else {
+        document.body.className = 'scoring';
+        document.getElementById('judgeTitle').textContent = `Trọng tài ${judgeId}`;
+        document.getElementById('matchTitle').textContent = `Sân ${court} - Trận: ${matchId}`;
+        chiefLink.href = `/chief.html?court=${encodeURIComponent(court)}&matchId=${encodeURIComponent(matchId)}`;
+
+        async function submitVote(side, point) {
+          setStatus(`Đã bấm ${sideName(side)} +${point}`, 'warn');
+          flash(side);
+
+          const response = await fetch('/api/votes', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              matchId,
+              court,
+              judgeId,
+              side,
+              point,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            setStatus(data.error || 'Không gửi được điểm', 'error');
+            return;
+          }
+
+          if (data.accepted) {
+            setStatus(`Được công nhận +${point}`, 'ok');
+          } else {
+            setStatus('Đã gửi, chờ đủ 3/4', 'warn');
+          }
+        }
+
+        const events = new EventSource(`/api/events?matchId=${encodeURIComponent(matchId)}`);
+
+        events.addEventListener('open', () => {
+          setStatus('Đã kết nối server');
+        });
+
+        events.addEventListener('error', () => {
+          setStatus('Mất kết nối server', 'error');
+        });
+
+        events.addEventListener('snapshot', (event) => {
+          const match = JSON.parse(event.data);
+
+          if (match.status === 'finished' && match.winner) {
+            setButtonsDisabled(true);
+            setStatus(`Trận đã kết thúc: ${sideName(match.winner.side)} thắng`, 'ok');
+          }
+        });
+
+        events.addEventListener('scoreAccepted', (event) => {
+          const score = JSON.parse(event.data);
+          const joined = score.judges.includes(judgeId);
+
+          flash(score.side);
+
+          if (joined) {
+            setStatus(`Phiếu của bạn được công nhận: ${sideName(score.side)} +${score.point}`, 'ok');
+          } else {
+            setStatus(`${sideName(score.side)} được cộng +${score.point}`, 'ok');
+          }
+        });
+
+        events.addEventListener('matchFinished', (event) => {
+          const data = JSON.parse(event.data);
+          setButtonsDisabled(true);
+          setStatus(`Kết thúc: ${sideName(data.winner.side)} thắng`, 'ok');
+        });
+
+        events.addEventListener('reset', () => {
+          setButtonsDisabled(false);
+          setStatus('Sẵn sàng');
+        });
+
+        scoreButtons.forEach((button) => {
+          button.addEventListener('click', () => {
+            submitVote(button.dataset.side, Number(button.dataset.point));
+          });
+        });
+      }
+    </script>
+  </body>
+</html>

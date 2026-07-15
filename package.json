@@ -1,0 +1,13 @@
+{
+  "name": "vovinam-scoring-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal Vovinam scoring server MVP with referee vote logic.",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

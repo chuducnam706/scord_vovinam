@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Màn hình tổng tài</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #020617;
+        color: #f8fafc;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 18px;
+        background: #0f172a;
+        border-bottom: 1px solid #334155;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 28px;
+      }
+
+      .muted {
+        color: #94a3b8;
+      }
+
+      .connection {
+        align-self: center;
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: #334155;
+        color: #e2e8f0;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 1fr 1fr 360px;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .fighter,
+      .panel {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border-radius: 8px;
+      }
+
+      .fighter.blue {
+        background: #1d4ed8;
+      }
+
+      .fighter.red {
+        background: #b91c1c;
+      }
+
+      .name {
+        text-align: center;
+        font-size: clamp(30px, 5vw, 56px);
+        font-weight: 900;
+      }
+
+      .score {
+        display: grid;
+        place-items: center;
+        min-height: 160px;
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.2);
+        font-size: clamp(90px, 15vw, 180px);
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .judges {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+
+      .judge {
+        display: grid;
+        place-items: center;
+        min-height: 60px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.16);
+        font-size: 26px;
+        font-weight: 900;
+      }
+
+      .judge.flash {
+        background: #facc15;
+        color: #111827;
+      }
+
+      .panel {
+        align-content: start;
+        border: 1px solid #334155;
+        background: #0f172a;
+      }
+
+      .panel h2 {
+        margin: 0;
+        font-size: 22px;
+      }
+
+      .log {
+        display: grid;
+        gap: 8px;
+        max-height: 480px;
+        overflow: auto;
+        color: #cbd5e1;
+        font-size: 14px;
+      }
+
+      .log div {
+        padding: 8px;
+        border-radius: 8px;
+        background: #111827;
+      }
+
+      @media (max-width: 980px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1 id="title">Màn hình tổng tài</h1>
+        <div class="muted" id="subtitle">Đang tải...</div>
+      </div>
+      <div class="connection" id="connection">Đang kết nối</div>
+    </header>
+
+    <main>
+      <section class="fighter blue">
+        <div class="name">XANH</div>
+        <div class="score" id="blueScore">0</div>
+        <div class="judges">
+          <div class="judge" id="blue-j1">1</div>
+          <div class="judge" id="blue-j2">2</div>
+          <div class="judge" id="blue-j3">3</div>
+          <div class="judge" id="blue-j4">4</div>
+        </div>
+      </section>
+
+      <section class="fighter red">
+        <div class="name">ĐỎ</div>
+        <div class="score" id="redScore">0</div>
+        <div class="judges">
+          <div class="judge" id="red-j1">1</div>
+          <div class="judge" id="red-j2">2</div>
+          <div class="judge" id="red-j3">3</div>
+          <div class="judge" id="red-j4">4</div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <h2>Log trọng tài</h2>
+        <div class="log" id="log"></div>
+      </aside>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const court = params.get('court') || '1';
+      const matchId = params.get('matchId') || `COURT_${court}`;
+      const blueScore = document.getElementById('blueScore');
+      const redScore = document.getElementById('redScore');
+      const connection = document.getElementById('connection');
+      const log = document.getElementById('log');
+
+      document.getElementById('title').textContent = `Tổng tài - Sân ${court}`;
+      document.getElementById('subtitle').textContent = `Mã trận: ${matchId}`;
+
+      function sideLabel(side) {
+        return side === 'blue' ? 'Xanh' : 'Đỏ';
+      }
+
+      function addLog(message) {
+        const row = document.createElement('div');
+        row.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        log.prepend(row);
+      }
+
+      function flashJudge(side, judgeId) {
+        const el = document.getElementById(`${side}-j${judgeId}`);
+        if (!el) return;
+
+        el.classList.add('flash');
+        window.setTimeout(() => {
+          el.classList.remove('flash');
+        }, 650);
+      }
+
+      function updateScores(scores) {
+        blueScore.textContent = scores.blue;
+        redScore.textContent = scores.red;
+      }
+
+      const events = new EventSource(`/api/events?matchId=${encodeURIComponent(matchId)}`);
+
+      events.addEventListener('open', () => {
+        connection.textContent = 'Đã kết nối';
+      });
+
+      events.addEventListener('error', () => {
+        connection.textContent = 'Mất kết nối';
+      });
+
+      events.addEventListener('snapshot', (event) => {
+        const match = JSON.parse(event.data);
+        updateScores(match.scores);
+      });
+
+      events.addEventListener('vote', (event) => {
+        const vote = JSON.parse(event.data);
+        flashJudge(vote.side, vote.judgeId);
+        addLog(`TT${vote.judgeId} bấm ${sideLabel(vote.side)} +${vote.point}`);
+      });
+
+      events.addEventListener('scoreAccepted', (event) => {
+        const score = JSON.parse(event.data);
+        updateScores(score.scores);
+        addLog(`${sideLabel(score.side)} được cộng +${score.point} bởi TT ${score.judges.join(', ')}`);
+      });
+
+      events.addEventListener('penalty', (event) => {
+        const penalty = JSON.parse(event.data);
+        updateScores(penalty.scores);
+        addLog(`${sideLabel(penalty.side)} bị trừ ${penalty.point} điểm`);
+      });
+
+      events.addEventListener('reset', (event) => {
+        const match = JSON.parse(event.data);
+        updateScores(match.scores);
+        log.innerHTML = '';
+        addLog('Đã reset điểm');
+      });
+    </script>
+  </body>
+</html>

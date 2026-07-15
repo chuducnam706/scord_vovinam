@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trọng tài hội diễn</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #0f172a;
+        color: #f8fafc;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 18px;
+        background: #111827;
+        border-bottom: 1px solid #334155;
+      }
+      .title { font-size: 22px; font-weight: 900; }
+      .muted { color: #94a3b8; font-size: 14px; }
+      .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      a {
+        display: grid;
+        place-items: center;
+        min-height: 38px;
+        padding: 0 12px;
+        border-radius: 8px;
+        background: #334155;
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 800;
+        text-decoration: none;
+      }
+      .status {
+        display: grid;
+        place-items: center;
+        min-height: 38px;
+        padding: 0 12px;
+        border-radius: 8px;
+        background: #1e293b;
+        color: #e2e8f0;
+      }
+      .status.ok { background: #166534; color: #dcfce7; }
+      .status.error { background: #7f1d1d; color: #fee2e2; }
+      main {
+        display: grid;
+        place-items: center;
+        min-height: calc(100vh - 76px);
+        padding: 18px;
+      }
+      .card {
+        display: grid;
+        gap: 20px;
+        width: min(780px, 100%);
+        padding: 22px;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        background: #111827;
+      }
+      .score {
+        display: grid;
+        place-items: center;
+        min-height: 170px;
+        border-radius: 12px;
+        background: #7c3aed;
+        font-size: clamp(72px, 18vw, 150px);
+        font-weight: 1000;
+        line-height: 1;
+      }
+      input[type='range'] {
+        width: 100%;
+        accent-color: #facc15;
+      }
+      .range-row {
+        display: grid;
+        gap: 10px;
+      }
+      .range-labels {
+        display: flex;
+        justify-content: space-between;
+        color: #94a3b8;
+        font-weight: 800;
+      }
+      button {
+        min-height: 82px;
+        border: 0;
+        border-radius: 12px;
+        background: #16a34a;
+        color: #ffffff;
+        font-size: clamp(26px, 6vw, 48px);
+        font-weight: 1000;
+        cursor: pointer;
+      }
+      button:active { transform: scale(0.99); }
+      button:disabled { cursor: not-allowed; opacity: 0.55; }
+      @media (max-width: 720px) {
+        header { display: grid; }
+        .actions { align-items: stretch; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <div class="title" id="title">Trọng tài hội diễn</div>
+        <div class="muted" id="subtitle">Đang tải...</div>
+      </div>
+      <div class="actions">
+        <a id="courtLink" href="#">Sân</a>
+        <a id="boardLink" href="#">Bảng điểm</a>
+        <div class="status" id="status">Sẵn sàng</div>
+      </div>
+    </header>
+
+    <main>
+      <section class="card">
+        <div class="muted">Kéo thanh điểm 0-100, số điểm sẽ đổi ngay phía trên để trọng tài dễ nhìn.</div>
+        <div class="score" id="scoreValue">80</div>
+        <div class="range-row">
+          <input id="scoreSlider" type="range" min="0" max="100" step="1" value="80" />
+          <div class="range-labels">
+            <span>0</span>
+            <span>50</span>
+            <span>100</span>
+          </div>
+        </div>
+        <button id="submitButton" type="button">Kết quả</button>
+      </section>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const court = params.get('court') || '1';
+      const matchId = params.get('matchId') || `PERFORMANCE_COURT_${court}`;
+      const judgeId = Number(params.get('judgeId') || 1);
+      const scoreValue = document.getElementById('scoreValue');
+      const scoreSlider = document.getElementById('scoreSlider');
+      const submitButton = document.getElementById('submitButton');
+      const statusEl = document.getElementById('status');
+      let hasSubmitted = false;
+
+      document.getElementById('title').textContent = `Sân hội diễn ${court} - Trọng tài ${judgeId}`;
+      document.getElementById('subtitle').textContent = `Mã bài thi: ${matchId} | Máy ${judgeId}`;
+      document.getElementById('courtLink').href = `/performance-court.html?court=${encodeURIComponent(court)}&matchId=${encodeURIComponent(matchId)}`;
+      document.getElementById('boardLink').href = `/performance-board.html?court=${encodeURIComponent(court)}&matchId=${encodeURIComponent(matchId)}`;
+
+      function setStatus(message, type = '') {
+        statusEl.textContent = message;
+        statusEl.className = `status ${type}`.trim();
+      }
+
+      function formatScore(value) {
+        return Number(value).toFixed(0);
+      }
+
+      function isSubmittedScore(value) {
+        return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+      }
+
+      function updateScoreDisplay() {
+        scoreValue.textContent = formatScore(scoreSlider.value);
+      }
+
+      function lockSubmittedScore(score) {
+        if (isSubmittedScore(score)) {
+          scoreSlider.value = Number(score).toFixed(0);
+          updateScoreDisplay();
+        }
+
+        hasSubmitted = true;
+        scoreSlider.disabled = true;
+        submitButton.disabled = true;
+        submitButton.textContent = 'Đã gửi kết quả';
+        setStatus(`Đã gửi ${formatScore(scoreSlider.value)}`, 'ok');
+      }
+
+      async function loadExistingScore() {
+        const response = await fetch(`/api/performance/matches/${encodeURIComponent(matchId)}?court=${encodeURIComponent(court)}`);
+        const data = await response.json();
+        const existing = data.judgeScores?.[judgeId] ?? data.judgeScores?.[String(judgeId)];
+
+        if (isSubmittedScore(existing)) {
+          lockSubmittedScore(existing);
+        }
+      }
+
+      scoreSlider.addEventListener('input', updateScoreDisplay);
+
+      submitButton.addEventListener('click', async () => {
+        if (hasSubmitted) return;
+
+        submitButton.disabled = true;
+        setStatus('Đang gửi...');
+
+        try {
+          const response = await fetch('/api/performance/scores', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              matchId,
+              court,
+              judgeId,
+              score: Number(scoreSlider.value),
+              deviceLabel: `Máy ${judgeId}`,
+            }),
+          });
+          const data = await response.json();
+
+          if (!response.ok) {
+            if (data.submitted && isSubmittedScore(data.submitted.score)) {
+              lockSubmittedScore(data.submitted.score);
+              return;
+            }
+
+            setStatus(data.error || 'Không gửi được', 'error');
+            return;
+          }
+
+          lockSubmittedScore(data.submitted?.score ?? scoreSlider.value);
+        } catch (error) {
+          setStatus('Mất kết nối', 'error');
+        } finally {
+          if (!hasSubmitted) {
+            submitButton.disabled = false;
+          }
+        }
+      });
+
+      updateScoreDisplay();
+      loadExistingScore().catch(() => setStatus('Sẵn sàng'));
+    </script>
+  </body>
+</html>

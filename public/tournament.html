@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Thông tin giải đấu</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #07111f;
+        color: #f8fafc;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 22px 24px;
+        background: #0f172a;
+        border-bottom: 1px solid #334155;
+      }
+      h1 { margin: 0 0 6px; font-size: 32px; }
+      h2 { margin: 0; font-size: 22px; }
+      .muted { color: #94a3b8; line-height: 1.4; }
+      .back {
+        display: grid;
+        place-items: center;
+        min-height: 44px;
+        padding: 0 14px;
+        border-radius: 8px;
+        background: #334155;
+        color: #ffffff;
+        font-weight: 800;
+        text-decoration: none;
+      }
+      main {
+        display: grid;
+        gap: 18px;
+        padding: 18px;
+      }
+      .section {
+        display: grid;
+        gap: 14px;
+        padding: 16px;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        background: #0f172a;
+      }
+      label {
+        display: grid;
+        gap: 8px;
+        color: #cbd5e1;
+        font-weight: 800;
+      }
+      input[type='text'],
+      input[type='file'] {
+        width: 100%;
+        min-height: 46px;
+        padding: 10px 12px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #111827;
+        color: #f8fafc;
+        font-size: 16px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      button {
+        min-height: 44px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #ffffff;
+        font-weight: 900;
+        cursor: pointer;
+      }
+      button.secondary { background: #334155; }
+      button.danger { background: #dc2626; }
+      button:disabled { cursor: not-allowed; opacity: 0.6; }
+      .status {
+        padding: 12px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #111827;
+        color: #cbd5e1;
+      }
+      .status.ok { border-color: #22c55e; color: #dcfce7; background: #052e16; }
+      .status.error { border-color: #ef4444; color: #fee2e2; background: #450a0a; }
+      .logo-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 12px;
+      }
+      .logo-card {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        background: #111827;
+      }
+      .logo-preview {
+        display: grid;
+        place-items: center;
+        min-height: 120px;
+        border-radius: 8px;
+        background: #ffffff;
+        overflow: hidden;
+      }
+      .logo-preview img {
+        max-width: 100%;
+        max-height: 120px;
+        object-fit: contain;
+      }
+      .logo-name {
+        color: #e2e8f0;
+        font-weight: 900;
+        overflow-wrap: anywhere;
+      }
+      .sponsor-list {
+        display: grid;
+        gap: 10px;
+      }
+      .sponsor-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+      }
+      .summary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .pill {
+        padding: 8px 10px;
+        border-radius: 999px;
+        background: #172033;
+        color: #cbd5e1;
+        font-weight: 800;
+      }
+      @media (max-width: 720px) {
+        header { display: grid; }
+        .sponsor-row { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Thông tin giải đấu</h1>
+        <div class="muted">Nhập tên giải, nhiều logo giải đấu và nhiều nhà tài trợ. Dữ liệu được lưu vào SQLite.</div>
+      </div>
+      <a class="back" href="/">Dashboard</a>
+    </header>
+
+    <main>
+      <div class="status" id="status">Đang tải dữ liệu...</div>
+
+      <section class="section">
+        <h2>Tên giải đấu</h2>
+        <label>
+          Tên giải
+          <input id="tournamentName" type="text" placeholder="VD: Giải Vovinam học sinh toàn quốc 2026" />
+        </label>
+      </section>
+
+      <section class="section">
+        <h2>Logo giải đấu</h2>
+        <div class="muted">Có thể chọn nhiều ảnh. Nên dùng PNG/JPG/WebP, mỗi ảnh tối đa khoảng 4MB để chạy mượt trong LAN.</div>
+        <input id="logoInput" type="file" accept="image/*" multiple />
+        <div class="summary" id="logoSummary"></div>
+        <div class="logo-grid" id="logoGrid"></div>
+      </section>
+
+      <section class="section">
+        <h2>Nhà tài trợ</h2>
+        <div class="muted">Nhập mỗi nhà tài trợ một dòng. Có thể thêm/xoá nhanh.</div>
+        <div class="sponsor-list" id="sponsorList"></div>
+        <div class="actions">
+          <button class="secondary" id="addSponsorButton" type="button">+ Thêm nhà tài trợ</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Lưu thông tin</h2>
+        <div class="summary" id="infoSummary"></div>
+        <div class="actions">
+          <button id="saveButton" type="button">Lưu thông tin giải đấu</button>
+          <button class="danger" id="clearButton" type="button">Xoá trắng form</button>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const nameInput = document.getElementById('tournamentName');
+      const logoInput = document.getElementById('logoInput');
+      const logoGrid = document.getElementById('logoGrid');
+      const logoSummary = document.getElementById('logoSummary');
+      const sponsorList = document.getElementById('sponsorList');
+      const infoSummary = document.getElementById('infoSummary');
+      const statusEl = document.getElementById('status');
+      const saveButton = document.getElementById('saveButton');
+      const clearButton = document.getElementById('clearButton');
+      const addSponsorButton = document.getElementById('addSponsorButton');
+
+      const MAX_LOGOS = 20;
+      const MAX_LOGO_BYTES = 4 * 1024 * 1024;
+      let logos = [];
+      let sponsors = [];
+
+      function makeId(prefix) {
+        if (window.crypto?.randomUUID) return `${prefix}_${window.crypto.randomUUID()}`;
+        return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      }
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function setStatus(message, type = '') {
+        statusEl.textContent = message;
+        statusEl.className = `status ${type}`.trim();
+      }
+
+      function formatSize(bytes) {
+        const value = Number(bytes || 0);
+        if (value < 1024) return `${value} B`;
+        if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+        return `${(value / 1024 / 1024).toFixed(1)} MB`;
+      }
+
+      function renderLogos() {
+        logoSummary.innerHTML = `<span class="pill">${logos.length}/${MAX_LOGOS} logo</span>`;
+        logoGrid.innerHTML = logos.length === 0
+          ? '<div class="muted">Chưa có logo nào.</div>'
+          : '';
+
+        logos.forEach((logo) => {
+          const card = document.createElement('article');
+          card.className = 'logo-card';
+          card.innerHTML = `
+            <div class="logo-preview">
+              <img src="${logo.dataUrl}" alt="${escapeHtml(logo.name)}" />
+            </div>
+            <div class="logo-name">${escapeHtml(logo.name)}</div>
+            <div class="muted">${escapeHtml(logo.type || 'image')} · ${formatSize(logo.size)}</div>
+            <button class="danger" type="button" data-logo-id="${escapeHtml(logo.id)}">Xoá logo</button>
+          `;
+          card.querySelector('button[data-logo-id]').addEventListener('click', () => {
+            logos = logos.filter((item) => item.id !== logo.id);
+            renderAll();
+          });
+          logoGrid.appendChild(card);
+        });
+      }
+
+      function renderSponsors() {
+        sponsorList.innerHTML = '';
+
+        if (sponsors.length === 0) {
+          addSponsor();
+          return;
+        }
+
+        sponsors.forEach((sponsor, index) => {
+          const row = document.createElement('div');
+          row.className = 'sponsor-row';
+          row.innerHTML = `
+            <input type="text" value="${escapeHtml(sponsor.name)}" placeholder="Tên nhà tài trợ ${index + 1}" />
+            <button class="danger" type="button">Xoá</button>
+          `;
+          const input = row.querySelector('input');
+          input.addEventListener('input', () => {
+            sponsor.name = input.value;
+            renderSummary();
+          });
+          row.querySelector('button').addEventListener('click', () => {
+            sponsors = sponsors.filter((item) => item.id !== sponsor.id);
+            renderAll();
+          });
+          sponsorList.appendChild(row);
+        });
+      }
+
+      function renderSummary() {
+        const sponsorCount = sponsors.filter((item) => String(item.name || '').trim()).length;
+        infoSummary.innerHTML = `
+          <span class="pill">Tên giải: ${nameInput.value.trim() ? 'đã nhập' : 'chưa nhập'}</span>
+          <span class="pill">${logos.length} logo</span>
+          <span class="pill">${sponsorCount} nhà tài trợ</span>
+        `;
+      }
+
+      function renderAll() {
+        renderLogos();
+        renderSponsors();
+        renderSummary();
+      }
+
+      function addSponsor(name = '') {
+        sponsors.push({
+          id: makeId('sponsor'),
+          name,
+        });
+        renderAll();
+      }
+
+      function fileToLogo(file) {
+        return new Promise((resolve, reject) => {
+          if (!file.type.startsWith('image/')) {
+            reject(new Error(`${file.name} không phải file ảnh.`));
+            return;
+          }
+          if (file.size > MAX_LOGO_BYTES) {
+            reject(new Error(`${file.name} lớn hơn 4MB.`));
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.onload = () => resolve({
+            id: makeId('logo'),
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            dataUrl: String(reader.result || ''),
+            createdAt: new Date().toISOString(),
+          });
+          reader.onerror = () => reject(new Error(`Không đọc được ${file.name}.`));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function collectPayload() {
+        const sponsorPayload = sponsors
+          .map((item) => ({
+            id: item.id,
+            name: String(item.name || '').trim(),
+          }))
+          .filter((item) => item.name);
+
+        return {
+          name: nameInput.value.trim(),
+          logos,
+          sponsors: sponsorPayload,
+        };
+      }
+
+      async function loadTournamentInfo() {
+        setStatus('Đang tải dữ liệu...');
+        const response = await fetch('/api/tournament');
+        const data = await response.json();
+
+        if (!response.ok) {
+          setStatus(data.error || 'Không tải được thông tin giải đấu.', 'error');
+          return;
+        }
+
+        nameInput.value = data.name || '';
+        logos = Array.isArray(data.logos) ? data.logos : [];
+        sponsors = Array.isArray(data.sponsors) ? data.sponsors : [];
+        renderAll();
+        setStatus(data.updatedAt ? `Đã tải dữ liệu lưu lần cuối: ${new Date(data.updatedAt).toLocaleString('vi-VN')}` : 'Sẵn sàng nhập thông tin.', 'ok');
+      }
+
+      async function saveTournamentInfo() {
+        saveButton.disabled = true;
+        setStatus('Đang lưu thông tin giải đấu...');
+
+        try {
+          const response = await fetch('/api/tournament', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(collectPayload()),
+          });
+          const data = await response.json();
+
+          if (!response.ok) {
+            setStatus(data.error || 'Không lưu được thông tin giải đấu.', 'error');
+            return;
+          }
+
+          nameInput.value = data.tournament.name || '';
+          logos = data.tournament.logos || [];
+          sponsors = data.tournament.sponsors || [];
+          renderAll();
+          setStatus('Đã lưu thông tin giải đấu.', 'ok');
+        } catch (error) {
+          setStatus('Mất kết nối server.', 'error');
+        } finally {
+          saveButton.disabled = false;
+        }
+      }
+
+      logoInput.addEventListener('change', async () => {
+        const files = Array.from(logoInput.files || []);
+        if (files.length === 0) return;
+
+        if (logos.length + files.length > MAX_LOGOS) {
+          setStatus(`Tối đa ${MAX_LOGOS} logo.`, 'error');
+          logoInput.value = '';
+          return;
+        }
+
+        try {
+          setStatus('Đang đọc logo...');
+          const nextLogos = await Promise.all(files.map(fileToLogo));
+          logos = logos.concat(nextLogos);
+          renderAll();
+          setStatus(`Đã thêm ${nextLogos.length} logo.`, 'ok');
+        } catch (error) {
+          setStatus(error.message || 'Không đọc được logo.', 'error');
+        } finally {
+          logoInput.value = '';
+        }
+      });
+
+      nameInput.addEventListener('input', renderSummary);
+      addSponsorButton.addEventListener('click', () => addSponsor());
+      saveButton.addEventListener('click', saveTournamentInfo);
+      clearButton.addEventListener('click', () => {
+        const ok = window.confirm('Xoá trắng form hiện tại? Chỉ mất dữ liệu trên màn hình, bấm Lưu mới ghi vào SQLite.');
+        if (!ok) return;
+
+        nameInput.value = '';
+        logos = [];
+        sponsors = [];
+        renderAll();
+        setStatus('Đã xoá trắng form. Bấm Lưu nếu muốn ghi thay đổi.', 'ok');
+      });
+
+      loadTournamentInfo().catch(() => {
+        renderAll();
+        setStatus('Không tải được dữ liệu giải đấu.', 'error');
+      });
+    </script>
+  </body>
+</html>

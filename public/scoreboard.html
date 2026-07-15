@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bảng điểm lớn</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #020617;
+        color: white;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 22px;
+        background: #0f172a;
+        border-bottom: 1px solid #334155;
+      }
+
+      .title {
+        font-size: 24px;
+        font-weight: 800;
+      }
+
+      .connection {
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: #334155;
+        color: #e2e8f0;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        padding: 18px;
+      }
+
+      .fighter {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+        border-radius: 8px;
+        min-height: 410px;
+      }
+
+      .blue {
+        background: #1d4ed8;
+      }
+
+      .red {
+        background: #b91c1c;
+      }
+
+      .name {
+        text-align: center;
+        font-size: clamp(34px, 6vw, 72px);
+        font-weight: 900;
+      }
+
+      .score {
+        display: grid;
+        place-items: center;
+        min-height: 210px;
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.2);
+        font-size: clamp(96px, 18vw, 230px);
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .judges {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+      }
+
+      .judge {
+        display: grid;
+        place-items: center;
+        min-height: 68px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.16);
+        font-size: 28px;
+        font-weight: 900;
+      }
+
+      .judge.flash {
+        background: #facc15;
+        color: #111827;
+      }
+
+      .footer {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 18px;
+        padding: 0 18px 18px;
+      }
+
+      .log {
+        min-height: 124px;
+        max-height: 180px;
+        overflow: auto;
+        padding: 14px;
+        border-radius: 8px;
+        background: #0f172a;
+        border: 1px solid #334155;
+        color: #cbd5e1;
+      }
+
+      .controls {
+        display: grid;
+        align-content: start;
+        gap: 10px;
+      }
+
+      button {
+        min-width: 130px;
+        min-height: 44px;
+        border: 0;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      @media (max-width: 860px) {
+        main,
+        .footer {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <div class="title" id="matchTitle">Bảng điểm lớn</div>
+        <div id="matchStatus">Đang tải...</div>
+      </div>
+      <div class="connection" id="connection">Đang kết nối</div>
+    </header>
+
+    <main>
+      <section class="fighter blue">
+        <div class="name">XANH</div>
+        <div class="score" id="blueScore">0</div>
+        <div class="judges">
+          <div class="judge" id="blue-j1">1</div>
+          <div class="judge" id="blue-j2">2</div>
+          <div class="judge" id="blue-j3">3</div>
+          <div class="judge" id="blue-j4">4</div>
+        </div>
+      </section>
+
+      <section class="fighter red">
+        <div class="name">ĐỎ</div>
+        <div class="score" id="redScore">0</div>
+        <div class="judges">
+          <div class="judge" id="red-j1">1</div>
+          <div class="judge" id="red-j2">2</div>
+          <div class="judge" id="red-j3">3</div>
+          <div class="judge" id="red-j4">4</div>
+        </div>
+      </section>
+    </main>
+
+    <section class="footer">
+      <div class="log" id="log"></div>
+      <div class="controls">
+        <button id="resetButton">Reset trận</button>
+      </div>
+    </section>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const matchId = params.get('matchId') || 'MATCH_001';
+      const blueScore = document.getElementById('blueScore');
+      const redScore = document.getElementById('redScore');
+      const logEl = document.getElementById('log');
+      const connectionEl = document.getElementById('connection');
+      const matchStatusEl = document.getElementById('matchStatus');
+
+      document.getElementById('matchTitle').textContent = `Bảng điểm lớn - ${matchId}`;
+
+      function sideLabel(side) {
+        return side === 'blue' ? 'Xanh' : 'Đỏ';
+      }
+
+      function addLog(message) {
+        const row = document.createElement('div');
+        row.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logEl.prepend(row);
+      }
+
+      function updateSnapshot(match) {
+        blueScore.textContent = match.scores.blue;
+        redScore.textContent = match.scores.red;
+
+        if (match.status === 'finished' && match.winner) {
+          matchStatusEl.textContent = `Kết thúc: ${sideLabel(match.winner.side)} thắng`;
+        } else {
+          matchStatusEl.textContent = 'Đang thi đấu';
+        }
+      }
+
+      function flashJudge(side, judgeId) {
+        const el = document.getElementById(`${side}-j${judgeId}`);
+        if (!el) return;
+
+        el.classList.add('flash');
+        window.setTimeout(() => {
+          el.classList.remove('flash');
+        }, 650);
+      }
+
+      const events = new EventSource(`/api/events?matchId=${encodeURIComponent(matchId)}`);
+
+      events.addEventListener('open', () => {
+        connectionEl.textContent = 'Đã kết nối';
+      });
+
+      events.addEventListener('error', () => {
+        connectionEl.textContent = 'Mất kết nối';
+      });
+
+      events.addEventListener('snapshot', (event) => {
+        updateSnapshot(JSON.parse(event.data));
+      });
+
+      events.addEventListener('vote', (event) => {
+        const vote = JSON.parse(event.data);
+        flashJudge(vote.side, vote.judgeId);
+        addLog(`TT${vote.judgeId} bấm ${sideLabel(vote.side)} +${vote.point}`);
+      });
+
+      events.addEventListener('scoreAccepted', (event) => {
+        const score = JSON.parse(event.data);
+        updateSnapshot({ scores: score.scores, status: 'running' });
+        addLog(`${sideLabel(score.side)} được công nhận +${score.point} bởi TT ${score.judges.join(', ')}`);
+      });
+
+      events.addEventListener('penalty', (event) => {
+        const penalty = JSON.parse(event.data);
+        updateSnapshot({ scores: penalty.scores, status: 'running' });
+        addLog(`${sideLabel(penalty.side)} bị trừ ${penalty.point} điểm`);
+      });
+
+      events.addEventListener('matchFinished', (event) => {
+        const data = JSON.parse(event.data);
+        addLog(`Kết thúc trận: ${sideLabel(data.winner.side)} thắng tuyệt đối`);
+      });
+
+      events.addEventListener('reset', (event) => {
+        updateSnapshot(JSON.parse(event.data));
+        logEl.innerHTML = '';
+        addLog('Đã reset trận');
+      });
+
+      document.getElementById('resetButton').addEventListener('click', async () => {
+        await fetch(`/api/matches/${encodeURIComponent(matchId)}/reset`, {
+          method: 'POST',
+        });
+      });
+    </script>
+  </body>
+</html>

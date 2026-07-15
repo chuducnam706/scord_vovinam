@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sân hội diễn</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #020617;
+        color: #f8fafc;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 18px;
+        background: #0f172a;
+        border-bottom: 1px solid #334155;
+      }
+      h1 { margin: 0; font-size: 30px; }
+      .muted { color: #94a3b8; }
+      .status {
+        align-self: center;
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: #1e293b;
+        color: #e2e8f0;
+        text-align: right;
+      }
+      main {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        padding: 16px;
+      }
+      .panel {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #0f172a;
+      }
+      .panel h2 { margin: 0 0 12px; font-size: 22px; }
+      .route-grid,
+      .judge-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      a {
+        display: grid;
+        place-items: center;
+        min-height: 76px;
+        padding: 12px;
+        border: 0;
+        border-radius: 8px;
+        background: #7c3aed;
+        color: #ffffff;
+        font-size: 20px;
+        font-weight: 800;
+        text-align: center;
+        text-decoration: none;
+      }
+      button {
+        min-height: 52px;
+        border: 0;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #ffffff;
+        font-size: 18px;
+        font-weight: 900;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      a.secondary { background: #334155; }
+      button.success { background: #16a34a; }
+      .current-box {
+        padding: 14px;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        background: #111827;
+      }
+      .current-title {
+        color: #94a3b8;
+        font-size: 13px;
+        font-weight: 800;
+      }
+      .current-name {
+        margin-top: 8px;
+        font-size: 30px;
+        font-weight: 1000;
+        line-height: 1.1;
+      }
+      .current-meta {
+        margin-top: 8px;
+        color: #cbd5e1;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .flow {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+        color: #94a3b8;
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      @media (max-width: 760px) {
+        header,
+        main { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1 id="courtTitle">Sân hội diễn</h1>
+        <div class="muted" id="matchTitle">Đang tải...</div>
+      </div>
+      <div class="status" id="status">Đang tải</div>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>Điều khiển lượt thi</h2>
+        <button class="success" id="nextButton" type="button">Next</button>
+        <div class="current-box">
+          <div class="current-title" id="currentLabel">CHƯA CÓ DỮ LIỆU</div>
+          <div class="current-name" id="currentName">Đang tự tìm danh sách</div>
+          <div class="current-meta" id="currentMeta">Khi đủ 5 điểm và công bố kết quả, chỉ cần bấm Next để sang lượt tiếp theo.</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Trọng tài hội diễn</h2>
+        <div class="judge-grid" id="judgeLinks"></div>
+      </section>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const court = params.get('court') || '1';
+      const matchId = params.get('matchId') || `PERFORMANCE_COURT_${court}`;
+      const judgeLinks = document.getElementById('judgeLinks');
+      const statusEl = document.getElementById('status');
+      const nextButton = document.getElementById('nextButton');
+      const currentLabel = document.getElementById('currentLabel');
+      const currentName = document.getElementById('currentName');
+      const currentMeta = document.getElementById('currentMeta');
+
+      document.getElementById('courtTitle').textContent = `Sân hội diễn ${court}`;
+      document.getElementById('matchTitle').textContent = `Mã bài thi: ${matchId}`;
+
+      for (let i = 1; i <= 5; i += 1) {
+        const link = document.createElement('a');
+        link.href = `/performance-referee.html?court=${encodeURIComponent(court)}&matchId=${encodeURIComponent(matchId)}&judgeId=${i}`;
+        link.textContent = `Trọng tài ${i}`;
+        judgeLinks.appendChild(link);
+      }
+
+      function setStatus(message) {
+        statusEl.textContent = message;
+      }
+
+      function renderDisplay(display) {
+        if (!display || !display.hasSchedule) {
+          currentLabel.textContent = 'CHƯA CÓ DỮ LIỆU';
+          currentName.textContent = 'Sân này chưa được phân nội dung';
+          currentMeta.textContent = 'Hãy vào màn Chia sân hội diễn ở dashboard để gán nội dung cho sân này.';
+          nextButton.disabled = true;
+          return;
+        }
+
+        const current = display.currentEntry;
+        currentLabel.textContent = String(display.currentLabel || 'CHƯA CÓ DỮ LIỆU').toUpperCase();
+        currentName.textContent = current?.displayName || display.title || 'Danh sách hội diễn';
+        currentMeta.textContent = current
+          ? `${current.unit || '--'} • ${current.routineName || '--'} • ${display.nextReason || ''}`
+          : ((display.currentMeta || 'Chưa có mục đang hiển thị') + (display.nextReason ? ` • ${display.nextReason}` : ''));
+        nextButton.disabled = !display.canNext;
+      }
+
+      async function loadDisplay() {
+        const response = await fetch(`/api/performance/courts/${encodeURIComponent(court)}/display`);
+        const data = await response.json();
+        renderDisplay(data);
+      }
+
+      nextButton.addEventListener('click', async () => {
+        setStatus('Đang chuyển lượt...');
+        const response = await fetch(`/api/performance/courts/${encodeURIComponent(court)}/next`, {
+          method: 'POST',
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          setStatus(data.error || 'Không chuyển được lượt');
+          return;
+        }
+
+        renderDisplay(data.display);
+        setStatus('Đã sang lượt tiếp theo');
+      });
+
+      const displayEvents = new EventSource(`/api/events?type=performance-court-display&court=${encodeURIComponent(court)}`);
+      displayEvents.addEventListener('performanceCourtDisplaySnapshot', (event) => {
+        renderDisplay(JSON.parse(event.data));
+      });
+
+      loadDisplay()
+        .then(() => setStatus('Sẵn sàng'))
+        .catch(() => setStatus('Không tải được dữ liệu'));
+    </script>
+  </body>
+</html>

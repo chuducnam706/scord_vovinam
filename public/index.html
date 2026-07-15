@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #07111f;
+        color: #f8fafc;
+      }
+
+      header {
+        padding: 22px 24px;
+        background: #0f172a;
+        border-bottom: 1px solid #334155;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 32px;
+      }
+
+      .muted {
+        color: #94a3b8;
+      }
+
+      main {
+        display: grid;
+        gap: 18px;
+        padding: 18px;
+      }
+
+      .section {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #0f172a;
+      }
+
+      .section h2 {
+        margin: 0;
+        font-size: 22px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 12px;
+      }
+
+      .grid.primary {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+
+      a {
+        display: grid;
+        gap: 6px;
+        min-height: 96px;
+        padding: 16px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #172033;
+        color: #f8fafc;
+        text-decoration: none;
+      }
+
+      a:hover {
+        border-color: #38bdf8;
+        background: #1e293b;
+      }
+
+      a.primary-link {
+        min-height: 118px;
+        border-color: #38bdf8;
+        background: #123047;
+      }
+
+      strong {
+        font-size: 20px;
+      }
+
+      span {
+        color: #94a3b8;
+        line-height: 1.35;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Dashboard</h1>
+      <div class="muted">Luồng chính: điều phối 6 sân, rồi mỗi sân tự vận hành bảng điểm và trọng tài.</div>
+    </header>
+
+    <main>
+      <section class="section">
+        <h2>Vận hành giải</h2>
+        <div class="grid primary">
+          <a class="primary-link" href="/arena.html">
+            <strong>Điều phối sân</strong>
+            <span>Xem 6 sân, chọn Đối kháng/Hội diễn và vào màn vận hành.</span>
+          </a>
+          <a class="primary-link" href="/performance-dispatch.html">
+            <strong>Chia sân hội diễn</strong>
+            <span>Gán nội dung hội diễn vào sân bằng bảng đơn giản, không hiện số lượt.</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Chuẩn bị dữ liệu</h2>
+        <div class="grid">
+          <a href="/import.html">
+            <strong>Import dữ liệu</strong>
+            <span>Nhập danh sách VĐV/đội từ Excel hoặc CSV và lưu vào SQLite.</span>
+          </a>
+          <a href="/performance-planner.html">
+            <strong>Xếp hội diễn</strong>
+            <span>Lọc theo lứa tuổi, bài quyền rồi lưu thứ tự thi để đem phân sân.</span>
+          </a>
+          <a href="/tournament.html">
+            <strong>Thông tin giải</strong>
+            <span>Tên giải đấu, logo và nhà tài trợ.</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Màn hình công khai</h2>
+        <div class="grid">
+          <a href="/public-boards.html">
+            <strong>Bảng điểm công khai</strong>
+            <span>Chọn sân 1-6 để mở bảng điểm hội diễn hoặc đối kháng.</span>
+          </a>
+          <a href="/mc-reader.html">
+            <strong>Màn MC đọc</strong>
+            <span>Danh sách hội diễn dạng bảng lớn, theo trạng thái realtime.</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Báo cáo / xếp hạng</h2>
+        <div class="grid">
+          <a href="/rankings.html">
+            <strong>Xếp hạng huy chương</strong>
+            <span>Hội diễn hiển thị 1 vàng, 1 bạc và 2 đồng giải ba.</span>
+          </a>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

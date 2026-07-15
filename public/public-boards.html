@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bảng điểm công khai</title>
+    <style>
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: #07111f;
+        color: #f8fafc;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 22px 24px;
+        background: #0f172a;
+        border-bottom: 1px solid #334155;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 { font-size: 32px; }
+      h2 { font-size: 22px; }
+      h3 { font-size: 22px; }
+
+      main {
+        display: grid;
+        gap: 18px;
+        padding: 18px;
+      }
+
+      .muted {
+        color: #94a3b8;
+        line-height: 1.35;
+      }
+
+      .section {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #0f172a;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+      }
+
+      a {
+        display: grid;
+        gap: 6px;
+        place-items: center;
+        min-height: 92px;
+        padding: 14px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #172033;
+        color: #f8fafc;
+        font-size: 18px;
+        font-weight: 900;
+        text-decoration: none;
+      }
+
+      a:hover {
+        border-color: #38bdf8;
+        background: #1e293b;
+      }
+
+      .performance { background: #4c2f91; }
+      .combat { background: #164e63; }
+      .empty {
+        background: #334155;
+        opacity: 0.65;
+        cursor: not-allowed;
+      }
+
+      .court-number {
+        font-size: 24px;
+        font-weight: 1000;
+      }
+
+      .court-mode {
+        color: #dbe4f0;
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      .secondary {
+        min-height: 44px;
+        padding: 0 12px;
+        background: #334155;
+        font-size: 14px;
+      }
+
+      @media (max-width: 760px) {
+        header {
+          display: grid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Bảng điểm công khai</h1>
+        <p class="muted">Chọn sân để mở màn hình hiển thị cho khán giả/màn hình lớn.</p>
+      </div>
+      <a class="secondary" href="/">Dashboard</a>
+    </header>
+
+    <main>
+      <section class="section">
+        <h2>Chọn bảng điểm</h2>
+        <div class="grid" id="boardGrid"></div>
+      </section>
+    </main>
+
+    <script>
+      const boardGrid = document.getElementById('boardGrid');
+
+      function boardUrl(court) {
+        if (court.mode === 'performance') {
+          return `/performance-board.html?court=${encodeURIComponent(court.court)}&matchId=${encodeURIComponent(court.matchId || `PERFORMANCE_COURT_${court.court}`)}`;
+        }
+        if (court.mode === 'combat') {
+          return `/scoreboard.html?matchId=${encodeURIComponent(court.matchId || `COURT_${court.court}`)}`;
+        }
+        return '';
+      }
+
+      function renderBoards(courts = []) {
+        boardGrid.innerHTML = courts.map((court) => {
+          const url = boardUrl(court);
+          const modeClass = court.mode || 'empty';
+          const modeLabel = court.modeLabel || 'Chưa chọn loại sân';
+
+          if (!url) {
+            return `
+              <a class="empty" href="/arena.html">
+                <span class="court-number">Sân ${court.court}</span>
+                <span class="court-mode">${modeLabel}</span>
+              </a>
+            `;
+          }
+
+          return `
+            <a class="${modeClass}" href="${url}">
+              <span class="court-number">Sân ${court.court}</span>
+              <span class="court-mode">${modeLabel}</span>
+            </a>
+          `;
+        }).join('');
+      }
+
+      async function loadCourts() {
+        const response = await fetch('/api/courts');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Không tải được danh sách sân.');
+        renderBoards(data.courts || []);
+      }
+
+      function renderFallback() {
+        renderBoards(Array.from({ length: 6 }, (_, index) => {
+          const court = index + 1;
+          return { court: String(court), mode: null, modeLabel: 'Chưa tải được' };
+        }));
+      }
+
+      loadCourts().catch(renderFallback);
+    </script>
+  </body>
+</html>
