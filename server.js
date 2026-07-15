@@ -6,7 +6,7 @@ const zlib = require('zlib');
 const { URL } = require('url');
 const { DatabaseSync } = require('node:sqlite');
 
-const HOST = process.env.HOST || '127.0.0.1';
+const HOST = process.env.HOST || '0.0.0.0';
 const PORT = Number(process.env.PORT || 3000);
 const STORAGE_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(STORAGE_DIR, 'vovinam.db');
