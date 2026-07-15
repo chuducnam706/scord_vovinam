@@ -1562,6 +1562,7 @@ const performancePlannerAliases = {
   name: ['ho ten', 'ten vdv', 'van dong vien', 'ten doi', 'doi thi', 'athlete', 'ho va ten'],
   unit: ['don vi', 'clb', 'cau lac bo', 'team', 'unit'],
   memberCount: ['so nguoi', 'so vdv', 'so thanh vien', 'nguoi moi doi', 'so luong'],
+  groupCode: ['ma nhom', 'ma doi', 'ma bai thi', 'ma doan', 'ma tiet muc', 'group code', 'team code'],
 };
 
 function publicPerformanceRoutine(routine) {
@@ -1579,14 +1580,52 @@ function findColumnIndexByAliases(columns, aliases) {
   });
 }
 
-function detectPerformancePlannerColumns(columns) {
-  return {
+function looksLikePerformanceGroupCode(value) {
+  const text = String(value || '').trim();
+  if (!text) return false;
+
+  return /^[A-ZĐ]{2,}[A-ZĐ0-9]*[-_.\s]?\d{1,4}$/i.test(text)
+    && !/^vdv\s*\d+$/i.test(text)
+    && !/^\d+$/.test(text);
+}
+
+function inferPerformanceGroupCodeColumn(columns, rows, knownIndexes = {}) {
+  const explicitIndex = findColumnIndexByAliases(columns, performancePlannerAliases.groupCode);
+  if (explicitIndex >= 0) return explicitIndex;
+
+  const ignoredIndexes = new Set(Object.values(knownIndexes).filter((index) => index >= 0));
+  let best = { index: -1, score: 0 };
+
+  columns.forEach((_, columnIndex) => {
+    if (ignoredIndexes.has(columnIndex)) return;
+
+    const values = rows
+      .map((row) => getRowCell(row, columnIndex))
+      .filter(Boolean);
+    if (!values.length) return;
+
+    const codeValues = values.filter(looksLikePerformanceGroupCode);
+    if (!codeValues.length) return;
+
+    const duplicateCount = codeValues.length - new Set(codeValues.map((value) => normalizeText(value))).size;
+    const score = (codeValues.length / values.length) + (duplicateCount > 0 ? 1 : 0);
+    if (score > best.score) best = { index: columnIndex, score };
+  });
+
+  return best.score >= 1 ? best.index : -1;
+}
+
+function detectPerformancePlannerColumns(columns, rows = []) {
+  const indexes = {
     age: findColumnIndexByAliases(columns, performancePlannerAliases.age),
     routine: findColumnIndexByAliases(columns, performancePlannerAliases.routine),
     name: findColumnIndexByAliases(columns, performancePlannerAliases.name),
     unit: findColumnIndexByAliases(columns, performancePlannerAliases.unit),
     memberCount: findColumnIndexByAliases(columns, performancePlannerAliases.memberCount),
   };
+
+  indexes.groupCode = inferPerformanceGroupCodeColumn(columns, rows, indexes);
+  return indexes;
 }
 
 function getRowCell(row, columnIndex) {
@@ -1688,7 +1727,7 @@ function resolveRoutineSelection(selectionId) {
 function buildPerformancePlannerOptions(batch) {
   const columns = Array.isArray(batch?.columns) ? batch.columns : [];
   const rows = Array.isArray(batch?.rows) ? batch.rows : [];
-  const indexes = detectPerformancePlannerColumns(columns);
+  const indexes = detectPerformancePlannerColumns(columns, rows);
   const ageOptions = getUniqueColumnValues(rows, indexes.age);
   const routineMap = new Map();
   const unmatchedRoutineValues = new Set();
@@ -1743,6 +1782,7 @@ function publicPerformancePlannerOptions(batch) {
       name: publicPlannerColumn(batch.columns, options.indexes.name),
       unit: publicPlannerColumn(batch.columns, options.indexes.unit),
       memberCount: publicPlannerColumn(batch.columns, options.indexes.memberCount),
+      groupCode: publicPlannerColumn(batch.columns, options.indexes.groupCode),
     },
     ageOptions: options.ageOptions,
     routineOptions: options.routineOptions,
@@ -1789,6 +1829,7 @@ function normalizePerformanceScheduleEntry(entry, index = 0) {
     groupCountForUnit: Number.isInteger(Number(entry?.groupCountForUnit))
       ? Math.max(1, Number(entry.groupCountForUnit))
       : 1,
+    groupCode: String(entry?.groupCode || '').trim().slice(0, 120),
     autoGroupKey: String(entry?.autoGroupKey || '').trim().slice(0, 300),
     needsAttention: Boolean(entry?.needsAttention) || participantCount !== expectedMemberCount,
     attentionReason: String(entry?.attentionReason || '').trim().slice(0, 300),
@@ -2949,6 +2990,7 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
       rowIndex,
       name: getRowCell(row, options.indexes.name) || getRowCell(row, 0) || `Mục ${rowIndex + 1}`,
       unit: getRowCell(row, options.indexes.unit),
+      groupCode: getRowCell(row, options.indexes.groupCode),
       rowAgeGroup: getRowCell(row, options.indexes.age),
     }));
 
@@ -2969,8 +3011,75 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
       autoGroupKey: `single:${item.rowIndex}`,
     }, entryIndex));
   } else {
-    const rowsByUnit = new Map();
+    const pushTeamEntry = (members, groupNumber, groupCountForUnit, unitKey, groupCode = '') => {
+      const unit = members[0]?.unit || '';
+      const missingUnit = !unit;
+      const incomplete = members.length !== memberCount;
+      const suffix = groupCountForUnit > 1 ? ` ${groupNumber}` : '';
+      const displayName = unit
+        ? `Đội ${unit}${suffix}`
+        : `Đội chưa rõ đơn vị${suffix}`;
+      const attentionReasons = [];
+      if (missingUnit) attentionReasons.push('Thiếu Đơn vị nên chưa thể xác nhận cách gom đội.');
+      if (incomplete) attentionReasons.push(`Đội mới có ${members.length}/${memberCount} VĐV.`);
+
+      entries.push(normalizePerformanceScheduleEntry({
+        entryId: `team_${slugifyText(groupCode || unitKey)}_${groupNumber}_${members[0]?.rowIndex + 1}`,
+        displayName,
+        unit,
+        ageGroup,
+        routineName: routineSelection.routine.name,
+        sourceRowIndex: members[0]?.rowIndex,
+        sourceRowIndexes: members.map((member) => member.rowIndex),
+        originalOrder: entries.length + 1,
+        memberNames: members.map((member) => member.name),
+        participantCount: members.length,
+        expectedMemberCount: memberCount,
+        groupNumber,
+        groupCountForUnit,
+        groupCode,
+        autoGroupKey: `${normalizeText(ageGroup)}:${targetRoutineId}:${unitKey}:${normalizeText(groupCode) || groupNumber}`,
+        needsAttention: missingUnit || incomplete,
+        attentionReason: attentionReasons.join(' '),
+      }, entries.length));
+    };
+
+    const rowsByCode = new Map();
+    const rowsWithoutCode = [];
     matchingRows.forEach((item) => {
+      const groupCode = String(item.groupCode || '').trim();
+      if (!groupCode) {
+        rowsWithoutCode.push(item);
+        return;
+      }
+
+      const unitKey = normalizeText(item.unit) || '__missing_unit__';
+      const codeKey = `${unitKey}:${normalizeText(groupCode)}`;
+      if (!rowsByCode.has(codeKey)) rowsByCode.set(codeKey, []);
+      rowsByCode.get(codeKey).push(item);
+    });
+
+    const codeGroupsByUnit = new Map();
+    rowsByCode.forEach((members) => {
+      const unitKey = normalizeText(members[0]?.unit) || '__missing_unit__';
+      if (!codeGroupsByUnit.has(unitKey)) codeGroupsByUnit.set(unitKey, []);
+      codeGroupsByUnit.get(unitKey).push(members);
+    });
+
+    codeGroupsByUnit.forEach((groupRows, unitKey) => {
+      groupRows.forEach((members, index) => {
+        pushTeamEntry(
+          members,
+          index + 1,
+          groupRows.length,
+          unitKey,
+          members[0]?.groupCode || '',
+        );
+      });
+    });
+
+    const rowsByUnit = new Map();
+    rowsWithoutCode.forEach((item) => {
       const unitKey = normalizeText(item.unit) || '__missing_unit__';
       if (!rowsByUnit.has(unitKey)) rowsByUnit.set(unitKey, []);
       rowsByUnit.get(unitKey).push(item);
@@ -2981,35 +3090,7 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
       for (let offset = 0; offset < unitRows.length; offset += memberCount) {
         const members = unitRows.slice(offset, offset + memberCount);
         const groupNumber = Math.floor(offset / memberCount) + 1;
-        const unit = members[0]?.unit || '';
-        const missingUnit = !unit;
-        const incomplete = members.length !== memberCount;
-        const suffix = groupCountForUnit > 1 ? ` ${groupNumber}` : '';
-        const displayName = unit
-          ? `Đội ${unit}${suffix}`
-          : `Đội chưa rõ đơn vị${suffix}`;
-        const attentionReasons = [];
-        if (missingUnit) attentionReasons.push('Thiếu Đơn vị nên chưa thể xác nhận cách gom đội.');
-        if (incomplete) attentionReasons.push(`Đội mới có ${members.length}/${memberCount} VĐV.`);
-
-        entries.push(normalizePerformanceScheduleEntry({
-          entryId: `team_${slugifyText(unitKey)}_${groupNumber}_${members[0]?.rowIndex + 1}`,
-          displayName,
-          unit,
-          ageGroup,
-          routineName: routineSelection.routine.name,
-          sourceRowIndex: members[0]?.rowIndex,
-          sourceRowIndexes: members.map((member) => member.rowIndex),
-          originalOrder: entries.length + 1,
-          memberNames: members.map((member) => member.name),
-          participantCount: members.length,
-          expectedMemberCount: memberCount,
-          groupNumber,
-          groupCountForUnit,
-          autoGroupKey: `${normalizeText(ageGroup)}:${targetRoutineId}:${unitKey}:${groupNumber}`,
-          needsAttention: missingUnit || incomplete,
-          attentionReason: attentionReasons.join(' '),
-        }, entries.length));
+        pushTeamEntry(members, groupNumber, groupCountForUnit, unitKey);
       }
     });
   }

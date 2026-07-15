@@ -543,6 +543,7 @@
           ['name', 'Tên VĐV/Đội'],
           ['unit', 'Đơn vị'],
           ['memberCount', 'Số VĐV/đội'],
+          ['groupCode', 'Mã đội/nhóm'],
         ];
 
         labels.forEach(([key, label]) => {
@@ -580,6 +581,7 @@
             <td>${index + 1}</td>
             <td>
               <div class="entry-title">${escapeHtml(entry.displayName)}</div>
+              ${entry.groupCode ? `<div class="member-list">Mã đội: ${escapeHtml(entry.groupCode)}</div>` : ''}
               ${showMembers ? `<div class="member-list">Thành viên: ${escapeHtml(entry.memberSummary || members.join(', '))}</div>` : ''}
               ${entry.needsAttention ? `<div class="entry-warning">${escapeHtml(entry.attentionReason || 'Nhóm này chưa đủ dữ liệu.')}</div>` : ''}
             </td>
