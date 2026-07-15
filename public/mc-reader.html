@@ -124,37 +124,6 @@
         font-size: 15px;
       }
 
-      .summary-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 12px;
-      }
-
-      .summary-card {
-        padding: 14px;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        background: #111827;
-      }
-
-      .summary-card strong {
-        display: block;
-        margin-top: 8px;
-        font-size: 28px;
-      }
-
-      .summary-card.pending strong {
-        color: #fde68a;
-      }
-
-      .summary-card.in-progress strong {
-        color: #86efac;
-      }
-
-      .summary-card.completed strong {
-        color: #fca5a5;
-      }
-
       .table-wrap {
         overflow: auto;
         border: 1px solid #334155;
@@ -330,10 +299,6 @@
       </section>
 
       <section class="panel">
-        <div class="summary-grid" id="summaryGrid"></div>
-      </section>
-
-      <section class="panel">
         <div class="table-wrap">
           <table>
             <thead>
@@ -358,7 +323,6 @@
       const params = new URLSearchParams(window.location.search);
       const refreshButton = document.getElementById('refreshButton');
       const statusEl = document.getElementById('status');
-      const summaryGrid = document.getElementById('summaryGrid');
       const scheduleTableBody = document.getElementById('scheduleTableBody');
       const courtFilter = document.getElementById('courtFilter');
 
@@ -394,20 +358,7 @@
           .replace(/'/g, '&#039;');
       }
 
-      function statusCounts(entries = []) {
-        return entries.reduce((acc, entry) => {
-          const status = entry.status || 'pending';
-          acc[status] = (acc[status] || 0) + 1;
-          return acc;
-        }, {
-          pending: 0,
-          in_progress: 0,
-          completed: 0,
-        });
-      }
-
       function renderEmpty(message) {
-        summaryGrid.innerHTML = '';
         scheduleTableBody.innerHTML = `<tr><td class="empty" colspan="8">${escapeHtml(message)}</td></tr>`;
       }
 
@@ -460,40 +411,6 @@
         }
       }
 
-      function renderSummary(rows) {
-        const counts = rows.reduce((acc, row) => {
-          acc[row.currentStatus] = (acc[row.currentStatus] || 0) + 1;
-          return acc;
-        }, {
-          pending: 0,
-          in_progress: 0,
-          completed: 0,
-        });
-
-        summaryGrid.innerHTML = `
-          <div class="summary-card">
-            Tổng lượt thi
-            <strong>${rows.length}</strong>
-          </div>
-          <div class="summary-card">
-            Tổng danh sách
-            <strong>${schedules.length}</strong>
-          </div>
-          <div class="summary-card pending">
-            Chưa diễn ra
-            <strong>${counts.pending}</strong>
-          </div>
-          <div class="summary-card in-progress">
-            Đang diễn ra
-            <strong>${counts.in_progress}</strong>
-          </div>
-          <div class="summary-card completed">
-            Đã kết thúc
-            <strong>${counts.completed}</strong>
-          </div>
-        `;
-      }
-
       function renderSchedules() {
         renderCourtFilter();
         const allRows = flattenRows();
@@ -503,8 +420,6 @@
           renderEmpty('Chưa có danh sách hội diễn nào được lưu.');
           return;
         }
-
-        renderSummary(rows);
 
         if (!rows.length) {
           scheduleTableBody.innerHTML = '<tr><td class="empty" colspan="8">Không có lượt thi nào theo bộ lọc sân hiện tại.</td></tr>';
