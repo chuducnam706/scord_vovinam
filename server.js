@@ -2990,7 +2990,6 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
       rowIndex,
       name: getRowCell(row, options.indexes.name) || getRowCell(row, 0) || `Mục ${rowIndex + 1}`,
       unit: getRowCell(row, options.indexes.unit),
-      groupCode: getRowCell(row, options.indexes.groupCode),
       rowAgeGroup: getRowCell(row, options.indexes.age),
     }));
 
@@ -3011,20 +3010,23 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
       autoGroupKey: `single:${item.rowIndex}`,
     }, entryIndex));
   } else {
-    const pushTeamEntry = (members, groupNumber, groupCountForUnit, unitKey, groupCode = '') => {
-      const unit = members[0]?.unit || '';
-      const missingUnit = !unit;
+    const pushTeamEntry = (members, groupNumber, groupCountForUnit) => {
+      const units = Array.from(new Set(
+        members
+          .map((member) => String(member.unit || '').trim())
+          .filter(Boolean),
+      ));
+      const unit = units.length === 1 ? units[0] : '';
       const incomplete = members.length !== memberCount;
       const suffix = groupCountForUnit > 1 ? ` ${groupNumber}` : '';
       const displayName = unit
         ? `Đội ${unit}${suffix}`
-        : `Đội chưa rõ đơn vị${suffix}`;
+        : `Đội ${groupNumber}`;
       const attentionReasons = [];
-      if (missingUnit) attentionReasons.push('Thiếu Đơn vị nên chưa thể xác nhận cách gom đội.');
       if (incomplete) attentionReasons.push(`Đội mới có ${members.length}/${memberCount} VĐV.`);
 
       entries.push(normalizePerformanceScheduleEntry({
-        entryId: `team_${slugifyText(groupCode || unitKey)}_${groupNumber}_${members[0]?.rowIndex + 1}`,
+        entryId: `team_${groupNumber}_${members[0]?.rowIndex + 1}`,
         displayName,
         unit,
         ageGroup,
@@ -3037,62 +3039,18 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
         expectedMemberCount: memberCount,
         groupNumber,
         groupCountForUnit,
-        groupCode,
-        autoGroupKey: `${normalizeText(ageGroup)}:${targetRoutineId}:${unitKey}:${normalizeText(groupCode) || groupNumber}`,
-        needsAttention: missingUnit || incomplete,
+        autoGroupKey: `${normalizeText(ageGroup)}:${targetRoutineId}:sequential:${groupNumber}`,
+        needsAttention: incomplete,
         attentionReason: attentionReasons.join(' '),
       }, entries.length));
     };
 
-    const rowsByCode = new Map();
-    const rowsWithoutCode = [];
-    matchingRows.forEach((item) => {
-      const groupCode = String(item.groupCode || '').trim();
-      if (!groupCode) {
-        rowsWithoutCode.push(item);
-        return;
-      }
-
-      const unitKey = normalizeText(item.unit) || '__missing_unit__';
-      const codeKey = `${unitKey}:${normalizeText(groupCode)}`;
-      if (!rowsByCode.has(codeKey)) rowsByCode.set(codeKey, []);
-      rowsByCode.get(codeKey).push(item);
-    });
-
-    const codeGroupsByUnit = new Map();
-    rowsByCode.forEach((members) => {
-      const unitKey = normalizeText(members[0]?.unit) || '__missing_unit__';
-      if (!codeGroupsByUnit.has(unitKey)) codeGroupsByUnit.set(unitKey, []);
-      codeGroupsByUnit.get(unitKey).push(members);
-    });
-
-    codeGroupsByUnit.forEach((groupRows, unitKey) => {
-      groupRows.forEach((members, index) => {
-        pushTeamEntry(
-          members,
-          index + 1,
-          groupRows.length,
-          unitKey,
-          members[0]?.groupCode || '',
-        );
-      });
-    });
-
-    const rowsByUnit = new Map();
-    rowsWithoutCode.forEach((item) => {
-      const unitKey = normalizeText(item.unit) || '__missing_unit__';
-      if (!rowsByUnit.has(unitKey)) rowsByUnit.set(unitKey, []);
-      rowsByUnit.get(unitKey).push(item);
-    });
-
-    rowsByUnit.forEach((unitRows, unitKey) => {
-      const groupCountForUnit = Math.ceil(unitRows.length / memberCount);
-      for (let offset = 0; offset < unitRows.length; offset += memberCount) {
-        const members = unitRows.slice(offset, offset + memberCount);
-        const groupNumber = Math.floor(offset / memberCount) + 1;
-        pushTeamEntry(members, groupNumber, groupCountForUnit, unitKey);
-      }
-    });
+    const groupCount = Math.ceil(matchingRows.length / memberCount);
+    for (let offset = 0; offset < matchingRows.length; offset += memberCount) {
+      const members = matchingRows.slice(offset, offset + memberCount);
+      const groupNumber = Math.floor(offset / memberCount) + 1;
+      pushTeamEntry(members, groupNumber, groupCount);
+    }
   }
 
   return {
