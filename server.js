@@ -13,7 +13,7 @@ const DB_FILE = path.join(STORAGE_DIR, 'vovinam.db');
 const LEGACY_STORAGE_FILE = path.join(STORAGE_DIR, 'storage.json');
 
 const config = {
-  judgeCount: 4,
+  judgeCount: 5,
   requiredVotes: 3,
   scoringWindowMs: 1500,
   technicalWinGap: 10,
@@ -27,6 +27,8 @@ const performanceConfig = {
   defaultScore: 80,
   scoreDecimals: 0,
 };
+
+const ROUTINE_LEVEL_AGE_GROUP = 'Tất cả';
 
 const performanceRoutineCatalog = [
   { id: 'don_luyen_tay_khong', name: 'Đơn Luyện Tay Không', aliases: ['don luyen tay khong'], memberCount: 1 },
@@ -76,10 +78,13 @@ const performanceCourtDisplays = new Map();
 const sseClients = new Map();
 const storage = {
   importedAthleteBatches: [],
-  tournamentInfo: null,
   performanceSchedules: [],
   performanceRoutineBatches: [],
   performanceResults: [],
+  tournamentInfo: {
+    name: '',
+    logoDataUrl: '',
+  },
 };
 
 let database = null;
@@ -156,6 +161,12 @@ function getDatabase() {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS app_settings (
+      setting_key TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS import_batches (
       batch_id TEXT PRIMARY KEY,
       file_name TEXT NOT NULL,
@@ -184,23 +195,18 @@ function getDatabase() {
       updated_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS tournament_info (
-      id TEXT PRIMARY KEY,
-      payload_json TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS performance_schedules (
       group_id TEXT PRIMARY KEY,
       batch_id TEXT NOT NULL,
       age_group TEXT NOT NULL,
+      gender_group TEXT NOT NULL DEFAULT '',
       routine_id TEXT NOT NULL,
       routine_name TEXT NOT NULL,
       entries_json TEXT NOT NULL,
       total_entries INTEGER NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      UNIQUE(batch_id, age_group, routine_id)
+      UNIQUE(batch_id, age_group, gender_group, routine_id)
     );
 
     CREATE TABLE IF NOT EXISTS performance_routine_batches (
@@ -239,6 +245,7 @@ function getDatabase() {
       court TEXT NOT NULL,
       match_id TEXT NOT NULL,
       age_group TEXT NOT NULL,
+      gender_group TEXT NOT NULL DEFAULT '',
       routine_id TEXT NOT NULL,
       routine_name TEXT NOT NULL,
       display_name TEXT NOT NULL,
@@ -255,7 +262,106 @@ function getDatabase() {
     );
   `);
 
+  migratePerformanceScheduleGenderSchema();
+  migratePerformanceResultsGenderSchema();
+
   return database;
+}
+
+function migratePerformanceScheduleGenderSchema() {
+  const db = database;
+  const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'performance_schedules'").get();
+  if (!table?.sql) return;
+
+  const columns = db.prepare('PRAGMA table_info(performance_schedules)').all();
+  const hasGenderColumn = columns.some((column) => column.name === 'gender_group');
+  const hasLegacyUnique = /UNIQUE\s*\(\s*batch_id\s*,\s*age_group\s*,\s*routine_id\s*\)/i.test(table.sql);
+  if (hasGenderColumn && !hasLegacyUnique) return;
+
+  db.exec(`
+    ALTER TABLE performance_schedules RENAME TO performance_schedules_old;
+
+    CREATE TABLE performance_schedules (
+      group_id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      age_group TEXT NOT NULL,
+      gender_group TEXT NOT NULL DEFAULT '',
+      routine_id TEXT NOT NULL,
+      routine_name TEXT NOT NULL,
+      entries_json TEXT NOT NULL,
+      total_entries INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(batch_id, age_group, gender_group, routine_id)
+    );
+
+    INSERT INTO performance_schedules (
+      group_id,
+      batch_id,
+      age_group,
+      gender_group,
+      routine_id,
+      routine_name,
+      entries_json,
+      total_entries,
+      created_at,
+      updated_at
+    )
+    SELECT
+      group_id,
+      batch_id,
+      age_group,
+      ${hasGenderColumn ? "COALESCE(gender_group, '')" : "''"},
+      routine_id,
+      routine_name,
+      entries_json,
+      total_entries,
+      created_at,
+      updated_at
+    FROM performance_schedules_old;
+
+    DROP TABLE performance_schedules_old;
+  `);
+}
+
+function migratePerformanceResultsGenderSchema() {
+  const db = database;
+  const columns = db.prepare('PRAGMA table_info(performance_results)').all();
+  if (columns.some((column) => column.name === 'gender_group')) return;
+  db.exec("ALTER TABLE performance_results ADD COLUMN gender_group TEXT NOT NULL DEFAULT ''");
+}
+
+function normalizeTournamentInfo(info = {}) {
+  return {
+    name: String(info?.name || '').trim().slice(0, 240),
+    logoDataUrl: String(info?.logoDataUrl || '').trim().slice(0, 2 * 1024 * 1024),
+    updatedAt: info?.updatedAt || nowIso(),
+  };
+}
+
+function readTournamentInfoFromDatabase() {
+  const row = getDatabase()
+    .prepare("SELECT payload_json FROM app_settings WHERE setting_key = 'tournament_info'")
+    .get();
+  if (!row?.payload_json) return normalizeTournamentInfo();
+  try {
+    return normalizeTournamentInfo(JSON.parse(row.payload_json));
+  } catch (error) {
+    return normalizeTournamentInfo();
+  }
+}
+
+function saveTournamentInfo(info) {
+  const saved = normalizeTournamentInfo({ ...info, updatedAt: nowIso() });
+  getDatabase().prepare(`
+    INSERT INTO app_settings (setting_key, payload_json, updated_at)
+    VALUES ('tournament_info', ?, ?)
+    ON CONFLICT(setting_key) DO UPDATE SET
+      payload_json = excluded.payload_json,
+      updated_at = excluded.updated_at
+  `).run(JSON.stringify(saved), saved.updatedAt);
+  storage.tournamentInfo = saved;
+  return saved;
 }
 
 function saveMatch(match) {
@@ -648,6 +754,7 @@ function normalizeMcQueueItem(item, index = 0) {
     displayName: String(item?.displayName || '').trim().slice(0, 240),
     unit: String(item?.unit || '').trim().slice(0, 240),
     ageGroup: String(item?.ageGroup || '').trim().slice(0, 120),
+    genderGroup: normalizeGender(item?.genderGroup || item?.gender || ''),
     routineName: String(item?.routineName || '').trim().slice(0, 240),
     memberNames,
     memberSummary: memberNames.join(', '),
@@ -847,6 +954,7 @@ function buildMcQueueFromPerformanceSchedule(group) {
     displayName: entry.displayName,
     unit: entry.unit,
     ageGroup: entry.ageGroup,
+    genderGroup: entry.genderGroup,
     routineName: entry.routineName,
     memberNames: entry.memberNames,
     participantCount: entry.participantCount,
@@ -880,6 +988,7 @@ function publicMcQueueItem(item, index = 0) {
     displayName: item.displayName,
     unit: item.unit,
     ageGroup: item.ageGroup,
+    genderGroup: item.genderGroup,
     routineName: item.routineName,
     memberNames: item.memberNames,
     memberSummary: item.memberSummary,
@@ -990,7 +1099,7 @@ function loadPerformanceScheduleToMcCourt(court, groupId) {
     mode: 'performance',
     sourceType: 'performance_schedule',
     sourceId: schedule.groupId,
-    title: `${schedule.ageGroup} - ${schedule.routineName}`,
+    title: `${schedule.ageGroup}${schedule.genderGroup ? ` - ${schedule.genderGroup}` : ''} - ${schedule.routineName}`,
     queue: buildMcQueueFromPerformanceSchedule(schedule),
     createdAt: existing?.createdAt || nowIso(),
     updatedAt: nowIso(),
@@ -1191,104 +1300,6 @@ function reorderMcCourtQueue(court, itemId, direction) {
 
     return { action: `reorder-${direction}` };
   });
-}
-
-function defaultTournamentInfo() {
-  return {
-    name: '',
-    logos: [],
-    sponsors: [],
-    updatedAt: null,
-  };
-}
-
-function normalizeTournamentAsset(asset) {
-  const id = String(asset?.id || newId('logo')).trim();
-  const name = String(asset?.name || 'Logo').trim().slice(0, 120) || 'Logo';
-  const type = String(asset?.type || '').trim().slice(0, 80);
-  const dataUrl = String(asset?.dataUrl || '').trim();
-  const size = Number(asset?.size || 0);
-
-  if (!dataUrl) return null;
-  if (!dataUrl.startsWith('data:image/')) return null;
-
-  return {
-    id,
-    name,
-    type,
-    size: Number.isFinite(size) && size >= 0 ? size : 0,
-    dataUrl,
-    createdAt: asset?.createdAt || nowIso(),
-  };
-}
-
-function normalizeTournamentSponsor(sponsor) {
-  const rawName = typeof sponsor === 'string' ? sponsor : sponsor?.name;
-  const name = String(rawName || '').trim().slice(0, 160);
-  if (!name) return null;
-
-  return {
-    id: String((typeof sponsor === 'object' && sponsor?.id) || newId('sponsor')).trim(),
-    name,
-  };
-}
-
-function normalizeTournamentInfo(payload = {}) {
-  const name = String(payload.name || '').trim().slice(0, 240);
-  const logos = Array.isArray(payload.logos)
-    ? payload.logos.map(normalizeTournamentAsset).filter(Boolean).slice(0, 20)
-    : [];
-  const sponsors = Array.isArray(payload.sponsors)
-    ? payload.sponsors.map(normalizeTournamentSponsor).filter(Boolean).slice(0, 100)
-    : [];
-
-  return {
-    name,
-    logos,
-    sponsors,
-    updatedAt: payload.updatedAt || nowIso(),
-  };
-}
-
-function readTournamentInfoFromDatabase() {
-  const row = getDatabase()
-    .prepare('SELECT payload_json FROM tournament_info WHERE id = ?')
-    .get('current');
-
-  if (!row) return defaultTournamentInfo();
-
-  try {
-    return normalizeTournamentInfo(JSON.parse(row.payload_json || '{}'));
-  } catch (error) {
-    return defaultTournamentInfo();
-  }
-}
-
-function saveTournamentInfo(info) {
-  const db = getDatabase();
-  const storedInfo = normalizeTournamentInfo({
-    ...info,
-    updatedAt: nowIso(),
-  });
-
-  db.prepare(`
-    INSERT INTO tournament_info (id, payload_json, updated_at)
-    VALUES (?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      payload_json = excluded.payload_json,
-      updated_at = excluded.updated_at
-  `).run(
-    'current',
-    JSON.stringify(storedInfo),
-    storedInfo.updatedAt,
-  );
-
-  storage.tournamentInfo = storedInfo;
-  return storedInfo;
-}
-
-function publicTournamentInfo() {
-  return storage.tournamentInfo || defaultTournamentInfo();
 }
 
 function makeImportedRoutineSelectionId(batchId, routineId) {
@@ -1557,11 +1568,12 @@ function saveImportedPerformanceRoutineBatch(result) {
 }
 
 const performancePlannerAliases = {
-  age: ['lua tuoi', 'nhom tuoi', 'do tuoi', 'tuoi', 'age'],
-  routine: ['bai quyen', 'bai thi', 'noi dung', 'noi dung thi', 'bai bieu dien', 'ten bai'],
-  name: ['ho ten', 'ten vdv', 'van dong vien', 'ten doi', 'doi thi', 'athlete', 'ho va ten'],
-  unit: ['don vi', 'clb', 'cau lac bo', 'team', 'unit'],
-  memberCount: ['so nguoi', 'so vdv', 'so thanh vien', 'nguoi moi doi', 'so luong'],
+  age: ['lua tuoi', 'luatuoi', 'nhom tuoi', 'nhomtuoi', 'do tuoi', 'dotuoi', 'tuoi', 'age'],
+  gender: ['gioi tinh', 'phai', 'nam nu', 'sex', 'gender'],
+  routine: ['bai quyen', 'baiquyen', 'bai thi', 'baithi', 'noi dung', 'noidung', 'noi dung thi', 'noidungthi', 'bai bieu dien', 'ten bai'],
+  name: ['ho ten', 'hoten', 'ten', 'ten vdv', 'tenvdv', 'van dong vien', 'vandongvien', 'ten doi', 'tendoi', 'doi thi', 'doithi', 'athlete', 'ho va ten'],
+  unit: ['don vi', 'donvi', 'clb', 'cau lac bo', 'caulacbo', 'team', 'unit'],
+  memberCount: ['so nguoi', 'songuoi', 'so vdv', 'sovdv', 'so thanh vien', 'sothanhvien', 'nguoi moi doi', 'so luong', 'soluong'],
   groupCode: ['ma nhom', 'ma doi', 'ma bai thi', 'ma doan', 'ma tiet muc', 'group code', 'team code'],
 };
 
@@ -1576,7 +1588,13 @@ function publicPerformanceRoutine(routine) {
 function findColumnIndexByAliases(columns, aliases) {
   return columns.findIndex((column) => {
     const normalizedColumn = normalizeText(column);
-    return aliases.some((alias) => normalizedColumn.includes(alias));
+    const compactColumn = normalizedColumn.replace(/\s+/g, '');
+    return aliases.some((alias) => {
+      const normalizedAlias = normalizeText(alias);
+      const compactAlias = normalizedAlias.replace(/\s+/g, '');
+      return normalizedColumn.includes(normalizedAlias)
+        || compactColumn.includes(compactAlias);
+    });
   });
 }
 
@@ -1618,6 +1636,7 @@ function inferPerformanceGroupCodeColumn(columns, rows, knownIndexes = {}) {
 function detectPerformancePlannerColumns(columns, rows = []) {
   const indexes = {
     age: findColumnIndexByAliases(columns, performancePlannerAliases.age),
+    gender: findColumnIndexByAliases(columns, performancePlannerAliases.gender),
     routine: findColumnIndexByAliases(columns, performancePlannerAliases.routine),
     name: findColumnIndexByAliases(columns, performancePlannerAliases.name),
     unit: findColumnIndexByAliases(columns, performancePlannerAliases.unit),
@@ -1631,6 +1650,15 @@ function detectPerformancePlannerColumns(columns, rows = []) {
 function getRowCell(row, columnIndex) {
   if (columnIndex < 0) return '';
   return String(row?.[columnIndex] || '').trim();
+}
+
+function normalizeGender(value) {
+  const raw = String(value || '').trim();
+  const normalized = normalizeText(raw);
+  if (!normalized) return '';
+  if (['nam', 'male', 'm', 'trai'].includes(normalized)) return 'Nam';
+  if (['nu', 'nữ', 'female', 'f', 'gai'].includes(normalized)) return 'Nữ';
+  return raw.slice(0, 40);
 }
 
 function getUniqueColumnValues(rows, columnIndex) {
@@ -1778,6 +1806,7 @@ function publicPerformancePlannerOptions(batch) {
     totalRows: batch.totalRows,
     detectedColumns: {
       age: publicPlannerColumn(batch.columns, options.indexes.age),
+      gender: publicPlannerColumn(batch.columns, options.indexes.gender),
       routine: publicPlannerColumn(batch.columns, options.indexes.routine),
       name: publicPlannerColumn(batch.columns, options.indexes.name),
       unit: publicPlannerColumn(batch.columns, options.indexes.unit),
@@ -1817,6 +1846,7 @@ function normalizePerformanceScheduleEntry(entry, index = 0) {
     displayName,
     unit: String(entry?.unit || '').trim().slice(0, 240),
     ageGroup: String(entry?.ageGroup || '').trim().slice(0, 120),
+    genderGroup: normalizeGender(entry?.genderGroup || entry?.gender || ''),
     routineName: String(entry?.routineName || '').trim().slice(0, 240),
     sourceRowIndex: Number.isInteger(Number(entry?.sourceRowIndex)) ? Number(entry.sourceRowIndex) : index,
     sourceRowIndexes,
@@ -1839,15 +1869,78 @@ function normalizePerformanceScheduleEntry(entry, index = 0) {
   };
 }
 
+function statusForGroupedScheduleEntries(entries) {
+  const statuses = entries.map((entry) => entry.status || 'pending');
+  if (statuses.includes('in_progress')) return 'in_progress';
+  if (statuses.length > 0 && statuses.every((status) => status === 'completed')) return 'completed';
+  return 'pending';
+}
+
+function upgradeLegacySingleEntriesToTeams(group, entries) {
+  const expectedMemberCount = matchPerformanceRoutine(group?.routineName)?.memberCount || 1;
+  if (expectedMemberCount <= 1 || entries.length <= 1) return entries;
+
+  const isLegacySingleList = entries.every((entry) => (
+    Number(entry.participantCount || entry.memberNames?.length || 1) <= 1
+    && Number(entry.expectedMemberCount || 1) <= 1
+  ));
+  if (!isLegacySingleList) return entries;
+
+  const upgradedEntries = [];
+
+  const groupCount = Math.ceil(entries.length / expectedMemberCount);
+  for (let offset = 0; offset < entries.length; offset += expectedMemberCount) {
+    const members = entries.slice(offset, offset + expectedMemberCount);
+    const groupNumber = Math.floor(offset / expectedMemberCount) + 1;
+    const units = Array.from(new Set(
+      members.map((entry) => String(entry.unit || '').trim()).filter(Boolean),
+    ));
+    const unit = units.length === 1 ? units[0] : units.join(', ');
+    const memberNames = members
+      .flatMap((entry) => (Array.isArray(entry.memberNames) && entry.memberNames.length
+        ? entry.memberNames
+        : [entry.displayName]))
+      .filter(Boolean);
+    const incomplete = memberNames.length !== expectedMemberCount;
+
+    upgradedEntries.push(normalizePerformanceScheduleEntry({
+      entryId: `team_${groupNumber}_${members[0]?.entryId || offset + 1}`,
+      displayName: `Đội ${groupNumber}`,
+      unit,
+      ageGroup: group?.ageGroup,
+      genderGroup: group?.genderGroup,
+      routineName: group?.routineName,
+      sourceRowIndex: members[0]?.sourceRowIndex,
+      sourceRowIndexes: members.flatMap((entry) => entry.sourceRowIndexes || [entry.sourceRowIndex]),
+      originalOrder: groupNumber,
+      memberNames,
+      participantCount: memberNames.length,
+      expectedMemberCount,
+      groupNumber,
+      groupCountForUnit: groupCount,
+      autoGroupKey: `${normalizeText(group?.ageGroup)}:${group?.routineId || normalizeText(group?.routineName)}:legacy:${groupNumber}`,
+      needsAttention: incomplete,
+      attentionReason: incomplete ? `Đội mới có ${memberNames.length}/${expectedMemberCount} VĐV.` : '',
+      status: statusForGroupedScheduleEntries(members),
+      startedAt: members.find((entry) => entry.startedAt)?.startedAt || null,
+      completedAt: members.every((entry) => entry.completedAt) ? members[members.length - 1]?.completedAt : null,
+    }, upgradedEntries.length));
+  }
+
+  return upgradedEntries;
+}
+
 function normalizePerformanceScheduleGroup(group) {
-  const entries = Array.isArray(group?.entries)
+  const normalizedEntries = Array.isArray(group?.entries)
     ? group.entries.map((entry, index) => normalizePerformanceScheduleEntry(entry, index))
     : [];
+  const entries = upgradeLegacySingleEntriesToTeams(group, normalizedEntries);
 
   return {
     groupId: String(group?.groupId || newId('performance_schedule')),
     batchId: String(group?.batchId || '').trim(),
     ageGroup: String(group?.ageGroup || '').trim().slice(0, 120),
+    genderGroup: normalizeGender(group?.genderGroup || group?.gender || ''),
     routineId: String(group?.routineId || '').trim(),
     routineName: String(group?.routineName || '').trim().slice(0, 240),
     entries,
@@ -1858,17 +1951,20 @@ function normalizePerformanceScheduleGroup(group) {
 }
 
 function publicPerformanceScheduleGroup(group, includeEntries = false) {
+  const inferredRoutineMemberCount = matchPerformanceRoutine(group.routineName)?.memberCount || 1;
   const memberCount = group.entries.length
-    ? normalizePerformanceMemberCount(group.entries[0]?.expectedMemberCount, 1)
-    : 1;
+    ? normalizePerformanceMemberCount(group.entries[0]?.expectedMemberCount, inferredRoutineMemberCount)
+    : inferredRoutineMemberCount;
   const autoGrouped = group.entries.length > 0 && group.entries.every((entry) => entry.autoGroupKey);
 
   return {
     groupId: group.groupId,
     batchId: group.batchId,
     ageGroup: group.ageGroup,
+    genderGroup: group.genderGroup,
     routineId: group.routineId,
     routineName: group.routineName,
+    sourceOrder: performanceScheduleSourceOrder(group),
     totalEntries: group.totalEntries,
     totalAthletes: group.entries.reduce((total, entry) => total + Number(entry.participantCount || 0), 0),
     memberCount,
@@ -1896,6 +1992,7 @@ function normalizePerformanceRankingResult(result) {
     court: String(result?.court || '').trim(),
     matchId: String(result?.matchId || '').trim(),
     ageGroup: String(result?.ageGroup || '').trim().slice(0, 120),
+    genderGroup: normalizeGender(result?.genderGroup || result?.gender || ''),
     routineId: String(result?.routineId || '').trim(),
     routineName: String(result?.routineName || '').trim().slice(0, 240),
     displayName: String(result?.displayName || '').trim().slice(0, 240),
@@ -1921,6 +2018,7 @@ function persistPerformanceRankingResult(result) {
       court,
       match_id,
       age_group,
+      gender_group,
       routine_id,
       routine_name,
       display_name,
@@ -1934,11 +2032,12 @@ function persistPerformanceRankingResult(result) {
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(result_id) DO UPDATE SET
       court = excluded.court,
       match_id = excluded.match_id,
       age_group = excluded.age_group,
+      gender_group = excluded.gender_group,
       routine_id = excluded.routine_id,
       routine_name = excluded.routine_name,
       display_name = excluded.display_name,
@@ -1957,6 +2056,7 @@ function persistPerformanceRankingResult(result) {
     saved.court,
     saved.matchId,
     saved.ageGroup,
+    saved.genderGroup,
     saved.routineId,
     saved.routineName,
     saved.displayName,
@@ -1981,6 +2081,7 @@ function readPerformanceRankingResultsFromDatabase() {
       court,
       match_id,
       age_group,
+      gender_group,
       routine_id,
       routine_name,
       display_name,
@@ -2004,6 +2105,7 @@ function readPerformanceRankingResultsFromDatabase() {
     court: row.court,
     matchId: row.match_id,
     ageGroup: row.age_group,
+    genderGroup: row.gender_group,
     routineId: row.routine_id,
     routineName: row.routine_name,
     displayName: row.display_name,
@@ -2027,6 +2129,7 @@ function publicPerformanceRankingResult(result) {
     court: result.court,
     matchId: result.matchId,
     ageGroup: result.ageGroup,
+    genderGroup: result.genderGroup,
     routineId: result.routineId,
     routineName: result.routineName,
     displayName: result.displayName,
@@ -2065,11 +2168,12 @@ function buildPerformanceRankingGroups() {
       return {
         groupId,
         ageGroup: sourceGroup?.ageGroup || first?.ageGroup || '',
+        genderGroup: sourceGroup?.genderGroup || first?.genderGroup || '',
         routineId: sourceGroup?.routineId || first?.routineId || '',
         routineName: sourceGroup?.routineName || first?.routineName || '',
         title: sourceGroup
-          ? `${sourceGroup.ageGroup} - ${sourceGroup.routineName}`
-          : `${first?.ageGroup || '--'} - ${first?.routineName || '--'}`,
+          ? `${sourceGroup.ageGroup}${sourceGroup.genderGroup ? ` - ${sourceGroup.genderGroup}` : ''} - ${sourceGroup.routineName}`
+          : `${first?.ageGroup || '--'}${first?.genderGroup ? ` - ${first.genderGroup}` : ''} - ${first?.routineName || '--'}`,
         totalResults: sortedResults.length,
         updatedAt: sortedResults[0]?.updatedAt || sourceGroup?.updatedAt || null,
         medalists: performanceMedalSlots.map((slot, index) => ({
@@ -2079,7 +2183,116 @@ function buildPerformanceRankingGroups() {
         results: sortedResults.map(publicPerformanceRankingResult),
       };
     })
-    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    .sort((a, b) => {
+      if (a.ageGroup === ROUTINE_LEVEL_AGE_GROUP || b.ageGroup === ROUTINE_LEVEL_AGE_GROUP) {
+        const aOrder = Number(a.previewEntries?.[0]?.sourceRowIndex ?? 999999);
+        const bOrder = Number(b.previewEntries?.[0]?.sourceRowIndex ?? 999999);
+        if (aOrder !== bOrder) return aOrder - bOrder;
+      }
+      return new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0);
+    });
+}
+
+function buildPerformanceRankingPayload() {
+  const groups = buildPerformanceRankingGroups();
+
+  return {
+    groups,
+    rankedGroups: groups.length,
+    totalGroups: storage.performanceSchedules.length,
+  };
+}
+
+function csvCell(value) {
+  const text = String(value ?? '');
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function buildPerformanceRankingCsv() {
+  const rows = [
+    ['Xếp hạng', 'Nội dung', 'Huy chương', 'Đơn vị', 'Số điểm'],
+  ];
+
+  buildPerformanceRankingGroups().forEach((group) => {
+    group.medalists.forEach((slot) => {
+      if (!slot.result) return;
+      rows.push([
+        `Hạng ${slot.rank}`,
+        `${group.routineName || '--'}${group.genderGroup ? ` - ${group.genderGroup}` : ''}`,
+        `${slot.medalLabel} (${slot.medalCode})`,
+        slot.result.unit || '--',
+        slot.result.totalScore ?? '--',
+      ]);
+    });
+  });
+
+  return `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\n')}`;
+}
+
+function exportPerformanceRankingCsv(res) {
+  const fileName = `danh-sach-huy-chuong-hoi-dien-${new Date().toISOString().slice(0, 10)}.csv`;
+  res.writeHead(200, {
+    'Content-Type': 'text/csv; charset=utf-8',
+    'Content-Disposition': `attachment; filename="${fileName}"`,
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(buildPerformanceRankingCsv());
+}
+
+function resetCompetitionData() {
+  const deleted = {
+    importedAthleteBatches: storage.importedAthleteBatches.length,
+    performanceRoutineBatches: storage.performanceRoutineBatches.length,
+    performanceSchedules: storage.performanceSchedules.length,
+    performanceResults: storage.performanceResults.length,
+    performanceCourtDisplays: performanceCourtDisplays.size,
+    performanceMatches: performanceMatches.size,
+    matches: matches.size,
+    courtAssignments: courtAssignments.size,
+    mcCourtStates: mcCourtStates.size,
+    tournamentInfo: storage.tournamentInfo.name || storage.tournamentInfo.logoDataUrl ? 1 : 0,
+  };
+
+  const groupIds = storage.performanceSchedules.map((group) => group.groupId);
+  const db = getDatabase();
+  db.exec(`
+    DELETE FROM performance_results;
+    DELETE FROM performance_schedules;
+    DELETE FROM performance_court_displays;
+    DELETE FROM performance_matches;
+    DELETE FROM performance_routine_batches;
+    DELETE FROM mc_court_states;
+    DELETE FROM court_assignments;
+    DELETE FROM matches;
+    DELETE FROM import_batches;
+    DELETE FROM app_settings WHERE setting_key = 'tournament_info';
+  `);
+
+  storage.tournamentInfo = normalizeTournamentInfo();
+  storage.importedAthleteBatches = [];
+  storage.performanceRoutineBatches = [];
+  storage.performanceResults = [];
+  storage.performanceSchedules = [];
+  performanceCourtDisplays.clear();
+  performanceMatches.clear();
+  matches.clear();
+  courtAssignments.clear();
+  mcCourtStates.clear();
+
+  groupIds.forEach((groupId) => {
+    broadcast(performanceScheduleChannelKey(groupId), 'performanceScheduleDeleted', { groupId });
+  });
+  Array.from({ length: COURT_COUNT }, (_, index) => String(index + 1))
+    .forEach((court) => {
+      broadcastMcCourt(court);
+      broadcastPerformanceCourtDisplay(court);
+    });
+  broadcastPerformanceRankings();
+
+  return {
+    reset: true,
+    deleted,
+  };
 }
 
 function performanceRankingChannelKey() {
@@ -2087,9 +2300,7 @@ function performanceRankingChannelKey() {
 }
 
 function broadcastPerformanceRankings() {
-  broadcast(performanceRankingChannelKey(), 'performanceRankingSnapshot', {
-    groups: buildPerformanceRankingGroups(),
-  });
+  broadcast(performanceRankingChannelKey(), 'performanceRankingSnapshot', buildPerformanceRankingPayload());
 }
 
 function saveCompletedPerformanceResult({ group, entry, court, matchId, matchSnapshot, completedAt }) {
@@ -2102,7 +2313,8 @@ function saveCompletedPerformanceResult({ group, entry, court, matchId, matchSna
     entryId: entry.entryId,
     court,
     matchId,
-    ageGroup: group.ageGroup,
+    ageGroup: entry.ageGroup || group.ageGroup,
+    genderGroup: entry.genderGroup || group.genderGroup,
     routineId: group.routineId,
     routineName: group.routineName,
     displayName: entry.displayName,
@@ -2125,12 +2337,18 @@ function saveCompletedPerformanceResult({ group, entry, court, matchId, matchSna
 function deriveDisplayEntryForPerformanceSchedule(group) {
   const entries = Array.isArray(group?.entries) ? group.entries : [];
   const current = entries.find((entry) => entry.status === 'in_progress');
+  const metaForEntry = (entry, fallback) => [
+    entry?.ageGroup || group.ageGroup || '--',
+    entry?.genderGroup || group.genderGroup || '',
+    fallback,
+  ].filter(Boolean).join(' • ');
+
   if (current) {
     return {
       label: 'Đang diễn ra',
       status: 'in_progress',
       entry: current,
-      meta: `${group.ageGroup || '--'} • Đang hiển thị theo trạng thái realtime`,
+      meta: metaForEntry(current, 'Đang hiển thị theo trạng thái realtime'),
     };
   }
 
@@ -2140,7 +2358,7 @@ function deriveDisplayEntryForPerformanceSchedule(group) {
       label: 'Chuẩn bị / Chưa diễn ra',
       status: 'pending',
       entry: pending,
-      meta: `${group.ageGroup || '--'} • Chưa có mục nào chuyển sang đang diễn ra`,
+      meta: metaForEntry(pending, 'Chưa có mục nào chuyển sang đang diễn ra'),
     };
   }
 
@@ -2150,7 +2368,7 @@ function deriveDisplayEntryForPerformanceSchedule(group) {
       label: 'Đã kết thúc',
       status: 'completed',
       entry: completed,
-      meta: `${group.ageGroup || '--'} • Tất cả mục trong danh sách đã kết thúc`,
+      meta: metaForEntry(completed, 'Tất cả mục trong danh sách đã kết thúc'),
     };
   }
 
@@ -2181,6 +2399,7 @@ function readPerformanceSchedulesFromDatabase() {
       group_id,
       batch_id,
       age_group,
+      gender_group,
       routine_id,
       routine_name,
       entries_json,
@@ -2195,13 +2414,14 @@ function readPerformanceSchedulesFromDatabase() {
     groupId: row.group_id,
     batchId: row.batch_id,
     ageGroup: row.age_group,
+    genderGroup: row.gender_group,
     routineId: row.routine_id,
     routineName: row.routine_name,
     entries: JSON.parse(row.entries_json || '[]'),
     totalEntries: row.total_entries,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  })).sort(comparePerformanceSchedulesBySourceOrder);
 }
 
 function getPerformanceScheduleGroup(groupId) {
@@ -2226,10 +2446,36 @@ function countPerformanceScheduleEntries(entries = []) {
   });
 }
 
+function performanceEntrySourceOrder(entry, fallback = 999999) {
+  const candidates = [
+    entry?.sourceRowIndex,
+    ...(Array.isArray(entry?.sourceRowIndexes) ? entry.sourceRowIndexes : []),
+  ].map((value) => Number(value));
+  const valid = candidates.filter((value) => Number.isInteger(value) && value >= 0);
+  return valid.length ? Math.min(...valid) : fallback;
+}
+
+function performanceScheduleSourceOrder(group, fallback = 999999) {
+  const entries = Array.isArray(group?.entries) ? group.entries : [];
+  if (!entries.length) return fallback;
+  return Math.min(...entries.map((entry, index) => performanceEntrySourceOrder(entry, fallback + index)));
+}
+
+function comparePerformanceSchedulesBySourceOrder(a, b) {
+  const aOrder = performanceScheduleSourceOrder(a);
+  const bOrder = performanceScheduleSourceOrder(b);
+  if (aOrder !== bOrder) return aOrder - bOrder;
+  return String(a?.routineName || '').localeCompare(String(b?.routineName || ''), 'vi', {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
 function getPerformanceCourtQueueSchedules(assignment) {
   return (assignment?.groupIds || [])
     .map((groupId) => getPerformanceScheduleGroup(groupId))
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort(comparePerformanceSchedulesBySourceOrder);
 }
 
 function getActivePerformanceCourtSchedule(assignment) {
@@ -2239,9 +2485,10 @@ function getActivePerformanceCourtSchedule(assignment) {
 
 function publicPerformanceQueueSchedule(group, index, activeGroupId = '') {
   const counts = countPerformanceScheduleEntries(group.entries || []);
+  const isRoutineLevel = group.ageGroup === ROUTINE_LEVEL_AGE_GROUP && !group.genderGroup;
   return {
     groupId: group.groupId,
-    title: `${group.ageGroup} - ${group.routineName}`,
+    title: isRoutineLevel ? group.routineName : `${group.ageGroup}${group.genderGroup ? ` - ${group.genderGroup}` : ''} - ${group.routineName}`,
     ageGroup: group.ageGroup,
     routineName: group.routineName,
     totalEntries: group.totalEntries,
@@ -2288,6 +2535,7 @@ function publicPerformanceCourtDisplay(court) {
   const activeQueueIndex = schedule
     ? queueSchedules.findIndex((group) => group.groupId === schedule.groupId)
     : -1;
+  const isRoutineLevel = schedule?.ageGroup === ROUTINE_LEVEL_AGE_GROUP && !schedule?.genderGroup;
 
   if (assignment?.groupIds?.length && !schedule) {
     nextReason = 'Hàng chờ hội diễn của sân này đã hoàn thành hết.';
@@ -2308,7 +2556,7 @@ function publicPerformanceCourtDisplay(court) {
     activeQueueIndex,
     hasSchedule: Boolean(schedule || assignment?.groupIds?.length),
     title: schedule
-      ? `${schedule.ageGroup} - ${schedule.routineName}`
+      ? (isRoutineLevel ? schedule.routineName : `${schedule.ageGroup}${schedule.genderGroup ? ` - ${schedule.genderGroup}` : ''} - ${schedule.routineName}`)
       : (assignment?.groupIds?.length ? 'Hàng chờ hội diễn đã hoàn thành' : ''),
     schedule: schedule ? publicPerformanceScheduleGroup(schedule, true) : null,
     queue: queueSchedules.map((group, index) => publicPerformanceQueueSchedule(group, index, schedule?.groupId || '')),
@@ -2384,6 +2632,7 @@ function performanceCourtSummary(court) {
 }
 
 function buildPerformanceDispatchData() {
+  const routineSync = ensureRoutineLevelSchedulesFromLatestImport();
   const assignmentsByGroupId = new Map();
   for (const assignment of performanceCourtDisplays.values()) {
     (assignment.groupIds || []).forEach((groupId, index) => {
@@ -2394,7 +2643,14 @@ function buildPerformanceDispatchData() {
     });
   }
 
-  const schedules = storage.performanceSchedules
+  const latestBatchId = routineSync.batch?.batchId || '';
+  const routineLevelSchedules = storage.performanceSchedules.filter((group) => (
+    isRoutineLevelPerformanceSchedule(group)
+    && (!latestBatchId || group.batchId === latestBatchId)
+  ));
+  const dispatchSourceSchedules = routineLevelSchedules.length ? routineLevelSchedules : storage.performanceSchedules;
+
+  const schedules = dispatchSourceSchedules
     .map((group) => {
       const counts = countPerformanceScheduleEntries(group.entries || []);
       const assignment = assignmentsByGroupId.get(group.groupId) || null;
@@ -2411,13 +2667,25 @@ function buildPerformanceDispatchData() {
           : (assignedCourt ? 'assigned' : 'unassigned'),
       };
     })
-    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    .sort((a, b) => {
+      const aOrder = Number(a.sourceOrder ?? 999999);
+      const bOrder = Number(b.sourceOrder ?? 999999);
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return String(a.routineName || '').localeCompare(String(b.routineName || ''), 'vi', { numeric: true, sensitivity: 'base' });
+    });
 
   const courts = Array.from({ length: COURT_COUNT }, (_, index) => performanceCourtSummary(index + 1));
 
   return {
     courts,
     schedules,
+    sourceBatch: routineSync.batch ? {
+      batchId: routineSync.batch.batchId,
+      fileName: routineSync.batch.fileName,
+      totalRows: routineSync.batch.totalRows,
+    } : null,
+    routineLevel: Boolean(routineLevelSchedules.length),
+    syncError: routineSync.error || null,
   };
 }
 
@@ -2439,12 +2707,196 @@ function broadcastPerformanceCourtDisplaysForGroup(groupId) {
   }
 }
 
-function getPerformanceScheduleGroupByKey(batchId, ageGroup, routineId) {
+function isRoutineLevelPerformanceSchedule(group) {
+  return group?.ageGroup === ROUTINE_LEVEL_AGE_GROUP && !group?.genderGroup;
+}
+
+function getPerformanceScheduleGroupByKey(batchId, ageGroup, genderGroup, routineId) {
+  const normalizedGender = normalizeGender(genderGroup);
   return storage.performanceSchedules.find((group) => (
     group.batchId === batchId
     && group.ageGroup === ageGroup
+    && (group.genderGroup || '') === normalizedGender
     && group.routineId === routineId
   )) || null;
+}
+
+function getLatestImportBatch() {
+  return [...storage.importedAthleteBatches]
+    .sort((a, b) => new Date(b.savedAt || b.updatedAt || 0) - new Date(a.savedAt || a.updatedAt || 0))[0] || null;
+}
+
+function routineIdFromRawValue(value) {
+  const normalized = normalizeText(value).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return `raw_${normalized || 'routine'}`;
+}
+
+function rawPerformanceRoutineParts(value) {
+  return String(value || '')
+    .split(/[;,/|]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => !normalizeText(item).includes('doi khang'));
+}
+
+function routineDefinitionsInImportOrder(batch, options) {
+  const seen = new Set();
+  const ordered = [];
+
+  (batch.rows || []).forEach((row) => {
+    rawPerformanceRoutineParts(getRowCell(row, options.indexes.routine)).forEach((rawRoutine) => {
+      const normalizedRaw = normalizeText(rawRoutine);
+      if (!normalizedRaw || seen.has(normalizedRaw)) return;
+      seen.add(normalizedRaw);
+      const matchedRoutine = matchPerformanceRoutine(rawRoutine);
+      const rowMemberCount = parsePerformanceMemberCount(getRowCell(row, options.indexes.memberCount));
+      ordered.push({
+        id: routineIdFromRawValue(rawRoutine),
+        rawKey: normalizedRaw,
+        name: rawRoutine,
+        memberCount: rowMemberCount || matchedRoutine?.memberCount || 1,
+      });
+    });
+  });
+
+  return ordered;
+}
+
+function buildRoutineLevelEntries(batch, options, routine) {
+  const memberCount = normalizePerformanceMemberCount(routine.memberCount, 1);
+  const routineRawKey = routine.rawKey || '';
+  const matchingRows = (batch.rows || [])
+    .map((row, rowIndex) => ({ row, rowIndex }))
+    .filter(({ row }) => {
+      const rawRoutine = getRowCell(row, options.indexes.routine);
+      if (routineRawKey) {
+        return rawPerformanceRoutineParts(rawRoutine).some((item) => normalizeText(item) === routineRawKey);
+      }
+      return matchedPerformanceRoutinesForValue(rawRoutine).some((item) => item.id === routine.id);
+    })
+    .map(({ row, rowIndex }) => ({
+      rowIndex,
+      name: getRowCell(row, options.indexes.name) || getRowCell(row, 0) || `Mục ${rowIndex + 1}`,
+      unit: getRowCell(row, options.indexes.unit),
+      ageGroup: getRowCell(row, options.indexes.age),
+      genderGroup: normalizeGender(getRowCell(row, options.indexes.gender)),
+    }));
+
+  if (memberCount <= 1) {
+    return matchingRows.map((item, entryIndex) => normalizePerformanceScheduleEntry({
+      entryId: `routine_${routine.id}_row_${item.rowIndex + 1}`,
+      displayName: item.name,
+      unit: item.unit,
+      ageGroup: item.ageGroup,
+      genderGroup: item.genderGroup,
+      routineName: routine.name,
+      sourceRowIndex: item.rowIndex,
+      sourceRowIndexes: [item.rowIndex],
+      originalOrder: entryIndex + 1,
+      memberNames: [item.name],
+      participantCount: 1,
+      expectedMemberCount: 1,
+      autoGroupKey: `routine:${routine.id}:single:${item.rowIndex}`,
+    }, entryIndex));
+  }
+
+  const entries = [];
+  const groupCount = Math.ceil(matchingRows.length / memberCount);
+  for (let offset = 0; offset < matchingRows.length; offset += memberCount) {
+    const members = matchingRows.slice(offset, offset + memberCount);
+    const groupNumber = Math.floor(offset / memberCount) + 1;
+    const units = Array.from(new Set(members.map((member) => member.unit).filter(Boolean)));
+    const incomplete = members.length !== memberCount;
+    entries.push(normalizePerformanceScheduleEntry({
+      entryId: `routine_${routine.id}_team_${groupNumber}_${members[0]?.rowIndex + 1}`,
+      displayName: `Đội ${groupNumber}`,
+      unit: units.length === 1 ? units[0] : units.join(', '),
+      ageGroup: members[0]?.ageGroup || '',
+      genderGroup: members[0]?.genderGroup || '',
+      routineName: routine.name,
+      sourceRowIndex: members[0]?.rowIndex,
+      sourceRowIndexes: members.map((member) => member.rowIndex),
+      originalOrder: entries.length + 1,
+      memberNames: members.map((member) => member.name),
+      participantCount: members.length,
+      expectedMemberCount: memberCount,
+      groupNumber,
+      groupCountForUnit: groupCount,
+      autoGroupKey: `routine:${routine.id}:team:${groupNumber}`,
+      needsAttention: incomplete,
+      attentionReason: incomplete ? `Đội mới có ${members.length}/${memberCount} VĐV.` : '',
+    }, entries.length));
+  }
+
+  return entries;
+}
+
+function mergeRoutineLevelEntryState(entries, existing) {
+  if (!existing?.entries?.length) return entries;
+  const previousById = new Map(existing.entries.map((entry) => [entry.entryId, entry]));
+  return entries.map((entry) => {
+    const previous = previousById.get(entry.entryId);
+    if (!previous) return entry;
+    return {
+      ...entry,
+      status: previous.status || entry.status,
+      startedAt: previous.startedAt || entry.startedAt,
+      completedAt: previous.completedAt || entry.completedAt,
+    };
+  });
+}
+
+function ensureRoutineLevelSchedulesFromLatestImport() {
+  const batch = getLatestImportBatch();
+  if (!batch) return { created: 0, batch: null };
+
+  const options = buildPerformancePlannerOptions(batch);
+  if (options.indexes.routine < 0) {
+    return { created: 0, batch, error: 'Batch import chưa có cột Nội dung/Bài quyền.' };
+  }
+
+  const routines = routineDefinitionsInImportOrder(batch, options);
+  const desiredGroupIds = new Set();
+  let savedCount = 0;
+
+  routines.forEach((routine) => {
+    const existing = getPerformanceScheduleGroupByKey(batch.batchId, ROUTINE_LEVEL_AGE_GROUP, '', routine.id);
+    const groupId = existing?.groupId || `routine_schedule_${batch.batchId}_${routine.id}`;
+    desiredGroupIds.add(groupId);
+    const entries = mergeRoutineLevelEntryState(
+      buildRoutineLevelEntries(batch, options, routine),
+      existing,
+    );
+    if (!entries.length) return;
+
+    persistPerformanceScheduleGroup({
+      groupId,
+      batchId: batch.batchId,
+      ageGroup: ROUTINE_LEVEL_AGE_GROUP,
+      genderGroup: '',
+      routineId: routine.id,
+      routineName: routine.name,
+      entries,
+      createdAt: existing?.createdAt || nowIso(),
+      updatedAt: nowIso(),
+    });
+    savedCount += 1;
+  });
+
+  storage.performanceSchedules
+    .filter((group) => (
+      isRoutineLevelPerformanceSchedule(group)
+      && group.batchId === batch.batchId
+      && !desiredGroupIds.has(group.groupId)
+    ))
+    .forEach((group) => deletePerformanceScheduleGroup(group.groupId));
+
+  storage.performanceSchedules = readPerformanceSchedulesFromDatabase();
+
+  return {
+    created: savedCount,
+    batch,
+  };
 }
 
 function deletePerformanceScheduleGroup(groupId) {
@@ -2492,6 +2944,7 @@ function persistPerformanceScheduleGroup(group) {
       group_id,
       batch_id,
       age_group,
+      gender_group,
       routine_id,
       routine_name,
       entries_json,
@@ -2499,8 +2952,8 @@ function persistPerformanceScheduleGroup(group) {
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(batch_id, age_group, routine_id) DO UPDATE SET
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(batch_id, age_group, gender_group, routine_id) DO UPDATE SET
       routine_name = excluded.routine_name,
       entries_json = excluded.entries_json,
       total_entries = excluded.total_entries,
@@ -2509,6 +2962,7 @@ function persistPerformanceScheduleGroup(group) {
     normalizedGroup.groupId,
     normalizedGroup.batchId,
     normalizedGroup.ageGroup,
+    normalizedGroup.genderGroup,
     normalizedGroup.routineId,
     normalizedGroup.routineName,
     JSON.stringify(normalizedGroup.entries),
@@ -2523,6 +2977,7 @@ function persistPerformanceScheduleGroup(group) {
 function savePerformanceScheduleGroup(payload) {
   const batchId = String(payload?.batchId || '').trim();
   const ageGroup = String(payload?.ageGroup || '').trim();
+  const genderGroup = normalizeGender(payload?.genderGroup || payload?.gender || '');
   const routineId = String(payload?.routineId || '').trim();
   const batch = getImportBatch(batchId);
   const routineSelection = resolveRoutineSelection(routineId);
@@ -2548,11 +3003,12 @@ function savePerformanceScheduleGroup(payload) {
     };
   }
 
-  const existing = getPerformanceScheduleGroupByKey(batchId, ageGroup, routineId);
+  const existing = getPerformanceScheduleGroupByKey(batchId, ageGroup, genderGroup, routineId);
   const group = persistPerformanceScheduleGroup({
     groupId: existing?.groupId || newId('performance_schedule'),
     batchId,
     ageGroup,
+    genderGroup,
     routineId,
     routineName: routineSelection.routine.name,
     entries: normalizedEntries,
@@ -2720,7 +3176,12 @@ function assignPerformanceScheduleToCourt(court, groupIdsInput) {
 
   const existing = getPerformanceCourtDisplay(normalizedCourt);
   const existingGroupIds = existing?.groupIds || [];
-  const nextGroupIds = Array.from(new Set([...existingGroupIds, ...groupIds]));
+  const nextGroupIds = Array.from(new Set([...existingGroupIds, ...groupIds]))
+    .sort((a, b) => {
+      const scheduleA = getPerformanceScheduleGroup(a);
+      const scheduleB = getPerformanceScheduleGroup(b);
+      return comparePerformanceSchedulesBySourceOrder(scheduleA, scheduleB);
+    });
   if (existingGroupIds.length === nextGroupIds.length) {
     const courtAssignment = getCourtAssignment(normalizedCourt);
     const matchId = courtAssignment?.matchId || defaultMatchIdForMode('performance', normalizedCourt);
@@ -2950,7 +3411,7 @@ function advancePerformanceScheduleForCourt(court) {
   };
 }
 
-function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMemberCount = null) {
+function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMemberCount = null, genderFilter = '') {
   const options = buildPerformancePlannerOptions(batch);
   if (options.indexes.age < 0) return { error: 'Không nhận diện được cột Lứa tuổi trong batch import.' };
   if (options.indexes.routine < 0) return { error: 'Không nhận diện được cột Bài quyền/Nội dung thi trong batch import.' };
@@ -2969,6 +3430,7 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
         || 1)
       : (routineSelection.routine.memberCount || 1),
   );
+  const normalizedGenderFilter = normalizeGender(genderFilter);
 
   const matchingRows = batch.rows
     .map((row, rowIndex) => ({ row, rowIndex }))
@@ -2990,8 +3452,10 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
       rowIndex,
       name: getRowCell(row, options.indexes.name) || getRowCell(row, 0) || `Mục ${rowIndex + 1}`,
       unit: getRowCell(row, options.indexes.unit),
+      genderGroup: normalizeGender(getRowCell(row, options.indexes.gender)),
       rowAgeGroup: getRowCell(row, options.indexes.age),
-    }));
+    }))
+    .filter((item) => !normalizedGenderFilter || item.genderGroup === normalizedGenderFilter);
 
   let entries = [];
   if (memberCount === 1) {
@@ -3000,6 +3464,7 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
       displayName: item.name,
       unit: item.unit,
       ageGroup: item.rowAgeGroup,
+      genderGroup: item.genderGroup,
       routineName: routineSelection.routine.name,
       sourceRowIndex: item.rowIndex,
       sourceRowIndexes: [item.rowIndex],
@@ -3016,12 +3481,9 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
           .map((member) => String(member.unit || '').trim())
           .filter(Boolean),
       ));
-      const unit = units.length === 1 ? units[0] : '';
+      const unit = units.length === 1 ? units[0] : units.join(', ');
       const incomplete = members.length !== memberCount;
-      const suffix = groupCountForUnit > 1 ? ` ${groupNumber}` : '';
-      const displayName = unit
-        ? `Đội ${unit}${suffix}`
-        : `Đội ${groupNumber}`;
+      const displayName = `Đội ${groupNumber}`;
       const attentionReasons = [];
       if (incomplete) attentionReasons.push(`Đội mới có ${members.length}/${memberCount} VĐV.`);
 
@@ -3030,6 +3492,7 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
         displayName,
         unit,
         ageGroup,
+        genderGroup: normalizedGenderFilter || members[0]?.genderGroup || '',
         routineName: routineSelection.routine.name,
         sourceRowIndex: members[0]?.rowIndex,
         sourceRowIndexes: members.map((member) => member.rowIndex),
@@ -3039,7 +3502,7 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
         expectedMemberCount: memberCount,
         groupNumber,
         groupCountForUnit,
-        autoGroupKey: `${normalizeText(ageGroup)}:${targetRoutineId}:sequential:${groupNumber}`,
+        autoGroupKey: `${normalizeText(ageGroup)}:${normalizeText(normalizedGenderFilter || members[0]?.genderGroup || '')}:${targetRoutineId}:sequential:${groupNumber}`,
         needsAttention: incomplete,
         attentionReason: attentionReasons.join(' '),
       }, entries.length));
@@ -3056,11 +3519,70 @@ function buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMem
   return {
     routine: routineSelection.routine,
     routineSelection,
+    genderGroup: normalizedGenderFilter,
     memberCount,
     totalAthletes: matchingRows.length,
     incompleteEntries: entries.filter((entry) => entry.needsAttention).length,
     entries,
     options,
+  };
+}
+
+function buildPerformancePlannerGenderGroups(batch, ageGroup, routineId, requestedMemberCount = null) {
+  const baseResult = buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMemberCount, '');
+  if (baseResult.error) return baseResult;
+
+  const options = buildPerformancePlannerOptions(batch);
+  if (options.indexes.gender < 0) {
+    return {
+      ...baseResult,
+      genderGroups: [{
+        genderGroup: '',
+        entries: baseResult.entries,
+        totalAthletes: baseResult.totalAthletes,
+        incompleteEntries: baseResult.incompleteEntries,
+      }],
+    };
+  }
+
+  const genderOrder = ['Nam', 'Nữ'];
+  const genders = Array.from(new Set(
+    batch.rows
+      .filter((row) => getRowCell(row, options.indexes.age) === ageGroup)
+      .map((row) => normalizeGender(getRowCell(row, options.indexes.gender)))
+      .filter(Boolean),
+  )).sort((a, b) => {
+    const ai = genderOrder.indexOf(a);
+    const bi = genderOrder.indexOf(b);
+    if (ai !== -1 || bi !== -1) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    return a.localeCompare(b, 'vi', { sensitivity: 'base' });
+  });
+
+  const genderGroups = genders
+    .map((genderGroup) => {
+      const result = buildPerformancePlannerEntries(batch, ageGroup, routineId, requestedMemberCount, genderGroup);
+      if (result.error || !result.entries.length) return null;
+      return {
+        genderGroup,
+        entries: result.entries,
+        totalAthletes: result.totalAthletes,
+        incompleteEntries: result.incompleteEntries,
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    ...baseResult,
+    genderGroups: genderGroups.length ? genderGroups : [{
+      genderGroup: '',
+      entries: baseResult.entries,
+      totalAthletes: baseResult.totalAthletes,
+      incompleteEntries: baseResult.incompleteEntries,
+    }],
+    entries: genderGroups[0]?.entries || baseResult.entries,
+    genderGroup: genderGroups[0]?.genderGroup || '',
+    totalAthletes: genderGroups.reduce((total, group) => total + group.totalAthletes, 0) || baseResult.totalAthletes,
+    incompleteEntries: genderGroups.reduce((total, group) => total + group.incompleteEntries, 0) || baseResult.incompleteEntries,
   };
 }
 
@@ -3197,7 +3719,6 @@ function saveStorage() {
   Array.from(courtAssignments.values()).forEach((assignment) => saveCourtAssignment(assignment));
   Array.from(mcCourtStates.values()).forEach((state) => persistMcCourtState(state));
   Array.from(performanceCourtDisplays.values()).forEach((display) => persistPerformanceCourtDisplay(display));
-  if (storage.tournamentInfo) saveTournamentInfo(storage.tournamentInfo);
   storage.performanceSchedules.forEach((group) => persistPerformanceScheduleGroup(group));
   storage.performanceRoutineBatches.forEach((batch) => persistPerformanceRoutineBatch(batch));
   storage.performanceResults.forEach((result) => persistPerformanceRankingResult(result));
@@ -3243,10 +3764,10 @@ function loadStorage() {
   });
 
   storage.importedAthleteBatches = readImportBatchesFromDatabase();
-  storage.tournamentInfo = readTournamentInfoFromDatabase();
   storage.performanceSchedules = readPerformanceSchedulesFromDatabase();
   storage.performanceRoutineBatches = readPerformanceRoutineBatchesFromDatabase();
   storage.performanceResults = readPerformanceRankingResultsFromDatabase();
+  storage.tournamentInfo = readTournamentInfoFromDatabase();
 }
 
 function getMatch(matchId) {
@@ -3405,8 +3926,8 @@ function validateVote(payload) {
   if (!['blue', 'red'].includes(side)) {
     return { error: 'side must be blue or red' };
   }
-  if (!Number.isInteger(point) || point < 1 || point > 3) {
-    return { error: 'point must be 1, 2, or 3' };
+  if (!Number.isInteger(point) || ![1, 2].includes(point)) {
+    return { error: 'point must be 1 or 2' };
   }
 
   return { matchId, court, judgeId, side, point };
@@ -3419,8 +3940,8 @@ function validateSidePoint(payload) {
   if (!['blue', 'red'].includes(side)) {
     return { error: 'side must be blue or red' };
   }
-  if (!Number.isInteger(point) || point < 1 || point > 99) {
-    return { error: 'point must be a positive integer' };
+  if (point !== 1) {
+    return { error: 'penalty point must be 1' };
   }
 
   return { side, point };
@@ -4072,9 +4593,14 @@ function applyVote(vote) {
 function applyPenalty(matchId, payload) {
   const match = getMatch(matchId);
   const parsed = validateSidePoint(payload);
+  const judgeId = Number(payload.judgeId);
 
   if (parsed.error) {
     return { statusCode: 400, payload: { error: parsed.error } };
+  }
+
+  if (judgeId !== 1) {
+    return { statusCode: 403, payload: { error: 'Chỉ Trọng tài 1 được trừ điểm' } };
   }
 
   if (match.status === 'finished') {
@@ -4264,7 +4790,7 @@ function handleEvents(req, res, url) {
   } else if (eventType === 'performance-ranking') {
     channelKey = performanceRankingChannelKey();
     initialEventName = 'performanceRankingSnapshot';
-    initialPayload = { groups: buildPerformanceRankingGroups() };
+    initialPayload = buildPerformanceRankingPayload();
   } else if (eventType === 'performance-court-display') {
     const normalizedCourt = normalizeCourt(court) || '1';
     ensurePerformanceScheduleForCourt(normalizedCourt);
@@ -4447,7 +4973,6 @@ function serveStatic(res, pathname) {
     '/rankings.html': 'rankings.html',
     '/referee.html': 'referee.html',
     '/scoreboard.html': 'scoreboard.html',
-    '/tournament.html': 'tournament.html',
   };
 
   const fileName = fileMap[pathname];
@@ -4474,15 +4999,36 @@ async function handleApi(req, res, url) {
   const method = req.method || 'GET';
   const pathname = url.pathname;
 
-  if (method === 'GET' && pathname === '/api/tournament') {
-    json(res, 200, publicTournamentInfo());
+  if (method === 'POST' && pathname === '/api/admin/reset-competition-data') {
+    json(res, 200, resetCompetitionData());
+    return;
+  }
+
+  if (method === 'GET' && pathname === '/api/tournament-info') {
+    json(res, 200, storage.tournamentInfo || normalizeTournamentInfo());
+    return;
+  }
+
+  if (method === 'POST' && pathname === '/api/tournament-info') {
+    try {
+      const payload = await readJson(req, 3 * 1024 * 1024);
+      json(res, 200, {
+        saved: true,
+        tournamentInfo: saveTournamentInfo(payload),
+      });
+    } catch (error) {
+      badRequest(res, error.message || 'Invalid JSON');
+    }
     return;
   }
 
   if (method === 'GET' && pathname === '/api/rankings/performance') {
-    json(res, 200, {
-      groups: buildPerformanceRankingGroups(),
-    });
+    json(res, 200, buildPerformanceRankingPayload());
+    return;
+  }
+
+  if (method === 'GET' && pathname === '/api/rankings/performance/export.csv') {
+    exportPerformanceRankingCsv(res);
     return;
   }
 
@@ -4496,20 +5042,6 @@ async function handleApi(req, res, url) {
       groups: [],
       message: 'Phần xếp hạng đối kháng sẽ nối tiếp vào dữ liệu kết quả đối kháng sau.',
     });
-    return;
-  }
-
-  if ((method === 'POST' || method === 'PUT' || method === 'PATCH') && pathname === '/api/tournament') {
-    try {
-      const payload = await readJson(req);
-      const saved = saveTournamentInfo(payload);
-      json(res, 200, {
-        saved: true,
-        tournament: saved,
-      });
-    } catch (error) {
-      badRequest(res, error.message || 'Invalid JSON');
-    }
     return;
   }
 
@@ -4684,21 +5216,30 @@ async function handleApi(req, res, url) {
         return;
       }
 
-      const result = buildPerformancePlannerEntries(batch, ageGroup, routineId, memberCount);
+      const result = buildPerformancePlannerGenderGroups(batch, ageGroup, routineId, memberCount);
       if (result.error) {
         badRequest(res, result.error);
         return;
       }
 
-      const existing = getPerformanceScheduleGroupByKey(batchId, ageGroup, routineId);
-      const existingMemberCount = existing?.entries?.length
-        ? normalizePerformanceMemberCount(existing.entries[0]?.expectedMemberCount, 1)
-        : null;
-      const existingWasAutoGrouped = Boolean(existing?.entries?.length)
-        && existing.entries.every((entry) => entry.autoGroupKey);
-      const canReuseSavedSchedule = existingWasAutoGrouped
-        && existingMemberCount === result.memberCount;
-      const entries = canReuseSavedSchedule ? existing.entries : result.entries;
+      const genderGroups = (result.genderGroups || []).map((group) => {
+        const existing = getPerformanceScheduleGroupByKey(batchId, ageGroup, group.genderGroup || '', routineId);
+        const existingMemberCount = existing?.entries?.length
+          ? normalizePerformanceMemberCount(existing.entries[0]?.expectedMemberCount, 1)
+          : null;
+        const existingWasAutoGrouped = Boolean(existing?.entries?.length)
+          && existing.entries.every((entry) => entry.autoGroupKey);
+        const canReuseSavedSchedule = existingWasAutoGrouped
+          && existingMemberCount === result.memberCount;
+        const entries = canReuseSavedSchedule ? existing.entries : group.entries;
+        return {
+          ...group,
+          entries,
+          incompleteEntries: entries.filter((entry) => entry.needsAttention).length,
+          savedSchedule: canReuseSavedSchedule ? publicPerformanceScheduleGroup(existing, true) : null,
+          scheduleNeedsRegrouping: Boolean(existing) && !canReuseSavedSchedule,
+        };
+      });
 
       json(res, 200, {
         batchId,
@@ -4709,12 +5250,13 @@ async function handleApi(req, res, url) {
         },
         memberCount: result.memberCount,
         totalAthletes: result.totalAthletes,
-        incompleteEntries: entries.filter((entry) => entry.needsAttention).length,
-        totalEntries: entries.length,
+        incompleteEntries: genderGroups.reduce((total, group) => total + group.incompleteEntries, 0),
+        totalEntries: genderGroups.reduce((total, group) => total + group.entries.length, 0),
         detectedColumns: publicPerformancePlannerOptions(batch).detectedColumns,
-        entries,
-        savedSchedule: canReuseSavedSchedule ? publicPerformanceScheduleGroup(existing, true) : null,
-        scheduleNeedsRegrouping: Boolean(existing) && !canReuseSavedSchedule,
+        genderGroups,
+        entries: genderGroups[0]?.entries || [],
+        savedSchedule: genderGroups.find((group) => group.savedSchedule)?.savedSchedule || null,
+        scheduleNeedsRegrouping: genderGroups.some((group) => group.scheduleNeedsRegrouping),
       });
     } catch (error) {
       badRequest(res, error.message || 'Invalid JSON');
@@ -5042,7 +5584,6 @@ const server = http.createServer(async (req, res) => {
       performanceCourt1: '/performance-court.html?court=1&matchId=PERFORMANCE_COURT_1',
       performancePlanner: '/performance-planner.html',
       import: '/import.html',
-      tournament: '/tournament.html',
     },
   });
 });
@@ -5054,7 +5595,6 @@ server.listen(PORT, HOST, () => {
   console.log(`Shared courts: ${baseUrl}/arena.html`);
   console.log(`MC dashboard: ${baseUrl}/mc-dashboard.html`);
   console.log(`Performance planner: ${baseUrl}/performance-planner.html`);
-  console.log(`Tournament info: ${baseUrl}/tournament.html`);
   console.log(`Import: ${baseUrl}/import.html`);
 
   if (HOST === '0.0.0.0') {

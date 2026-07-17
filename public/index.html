@@ -18,6 +18,10 @@
       }
 
       header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
         padding: 22px 24px;
         background: #0f172a;
         border-bottom: 1px solid #334155;
@@ -62,16 +66,55 @@
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       }
 
-      a {
+      .form-grid {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) minmax(180px, 260px) auto;
+        gap: 12px;
+        align-items: end;
+      }
+
+      label {
         display: grid;
         gap: 6px;
-        min-height: 96px;
+        color: #cbd5e1;
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      input {
+        min-height: 42px;
+        padding: 0 10px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #020617;
+        color: #f8fafc;
+        font-size: 15px;
+      }
+
+      button.primary-button {
+        min-height: 42px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #ffffff;
+        font-size: 15px;
+        font-weight: 900;
+        cursor: pointer;
+      }
+
+      a {
+        display: grid;
+        place-items: center start;
+        min-height: 70px;
         padding: 16px;
         border: 1px solid #334155;
         border-radius: 8px;
         background: #172033;
         color: #f8fafc;
         text-decoration: none;
+        text-align: left;
+        cursor: pointer;
       }
 
       a:hover {
@@ -80,38 +123,85 @@
       }
 
       a.primary-link {
-        min-height: 118px;
+        min-height: 76px;
         border-color: #38bdf8;
         background: #123047;
+      }
+
+      button.danger-button {
+        min-height: 38px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 8px;
+        background: #991b1b;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 900;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      button.danger-button:hover {
+        background: #b91c1c;
+      }
+
+      button.danger-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
       }
 
       strong {
         font-size: 20px;
       }
 
-      span {
-        color: #94a3b8;
-        line-height: 1.35;
+      @media (max-width: 720px) {
+        header {
+          display: grid;
+        }
+
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+
+        button.danger-button {
+          justify-self: start;
+        }
       }
     </style>
   </head>
   <body>
     <header>
-      <h1>Dashboard</h1>
-      <div class="muted">Luồng chính: điều phối 6 sân, rồi mỗi sân tự vận hành bảng điểm và trọng tài.</div>
+      <div>
+        <h1>Dashboard</h1>
+        <div class="muted">Luồng chính: điều phối 6 sân, rồi mỗi sân tự vận hành bảng điểm và trọng tài.</div>
+      </div>
+      <button class="danger-button" id="resetCompetitionButton" type="button">Reset toàn bộ giải</button>
     </header>
 
     <main>
+      <section class="section">
+        <h2>Thông tin giải</h2>
+        <div class="form-grid">
+          <label>
+            Tên giải đấu
+            <input id="tournamentNameInput" type="text" placeholder="VD: GIẢI VOVINAM HUYỆN NAM XANG 2025" />
+          </label>
+          <label>
+            Logo giải đấu
+            <input id="tournamentLogoInput" type="file" accept="image/*" />
+          </label>
+          <button class="primary-button" id="saveTournamentButton" type="button">Lưu</button>
+        </div>
+      </section>
+
       <section class="section">
         <h2>Vận hành giải</h2>
         <div class="grid primary">
           <a class="primary-link" href="/arena.html">
             <strong>Điều phối sân</strong>
-            <span>Xem 6 sân, chọn Đối kháng/Hội diễn và vào màn vận hành.</span>
           </a>
           <a class="primary-link" href="/performance-dispatch.html">
             <strong>Chia sân hội diễn</strong>
-            <span>Gán nội dung hội diễn vào sân bằng bảng đơn giản, không hiện số lượt.</span>
           </a>
         </div>
       </section>
@@ -121,15 +211,6 @@
         <div class="grid">
           <a href="/import.html">
             <strong>Import dữ liệu</strong>
-            <span>Nhập danh sách VĐV/đội từ Excel hoặc CSV và lưu vào SQLite.</span>
-          </a>
-          <a href="/performance-planner.html">
-            <strong>Xếp hội diễn</strong>
-            <span>Lọc theo lứa tuổi, bài quyền rồi lưu thứ tự thi để đem phân sân.</span>
-          </a>
-          <a href="/tournament.html">
-            <strong>Thông tin giải</strong>
-            <span>Tên giải đấu, logo và nhà tài trợ.</span>
           </a>
         </div>
       </section>
@@ -139,11 +220,9 @@
         <div class="grid">
           <a href="/public-boards.html">
             <strong>Bảng điểm công khai</strong>
-            <span>Chọn sân 1-6 để mở bảng điểm hội diễn hoặc đối kháng.</span>
           </a>
           <a href="/mc-reader.html">
             <strong>Màn MC đọc</strong>
-            <span>Danh sách hội diễn dạng bảng lớn, theo trạng thái realtime.</span>
           </a>
         </div>
       </section>
@@ -153,10 +232,79 @@
         <div class="grid">
           <a href="/rankings.html">
             <strong>Xếp hạng huy chương</strong>
-            <span>Hội diễn hiển thị 1 vàng, 1 bạc và 2 đồng giải ba.</span>
           </a>
         </div>
       </section>
     </main>
+    <script>
+      const resetCompetitionButton = document.getElementById('resetCompetitionButton');
+      const tournamentNameInput = document.getElementById('tournamentNameInput');
+      const tournamentLogoInput = document.getElementById('tournamentLogoInput');
+      const saveTournamentButton = document.getElementById('saveTournamentButton');
+      let tournamentLogoDataUrl = '';
+
+      function renderTournamentInfo(info = {}) {
+        tournamentNameInput.value = info.name || '';
+        tournamentLogoDataUrl = info.logoDataUrl || '';
+      }
+
+      async function loadTournamentInfo() {
+        const response = await fetch('/api/tournament-info');
+        const data = await response.json();
+        renderTournamentInfo(data);
+      }
+
+      tournamentLogoInput.addEventListener('change', () => {
+        const file = tournamentLogoInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          tournamentLogoDataUrl = String(reader.result || '');
+        };
+        reader.readAsDataURL(file);
+      });
+
+      saveTournamentButton.addEventListener('click', async () => {
+        saveTournamentButton.disabled = true;
+        try {
+          const response = await fetch('/api/tournament-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: tournamentNameInput.value,
+              logoDataUrl: tournamentLogoDataUrl,
+            }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Không lưu được thông tin giải.');
+          renderTournamentInfo(data.tournamentInfo);
+          alert('Đã lưu thông tin giải.');
+        } catch (error) {
+          alert(error.message);
+        } finally {
+          saveTournamentButton.disabled = false;
+        }
+      });
+
+      resetCompetitionButton.addEventListener('click', async () => {
+        const ok = confirm('Reset toàn bộ giải sẽ xoá import, lịch thi, phân sân, điểm, huy chương và đưa cả 6 sân về Trống. Có chắc muốn xoá hết không?');
+        if (!ok) return;
+
+        resetCompetitionButton.disabled = true;
+        try {
+          const response = await fetch('/api/admin/reset-competition-data', { method: 'POST' });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Reset thất bại.');
+          alert('Đã reset toàn bộ giải. Tất cả sân đã về Trống, có thể import dữ liệu giải mới.');
+        } catch (error) {
+          alert(`Không reset được: ${error.message}`);
+        } finally {
+          resetCompetitionButton.disabled = false;
+        }
+      });
+
+      loadTournamentInfo().catch(() => {
+      });
+    </script>
   </body>
 </html>

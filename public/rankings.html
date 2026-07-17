@@ -70,6 +70,15 @@
         background: #334155;
       }
 
+      a.success,
+      button.success {
+        background: #15803d;
+      }
+
+      button.danger {
+        background: #dc2626;
+      }
+
       button.tab-button {
         background: #172033;
         border: 1px solid #334155;
@@ -119,7 +128,7 @@
 
       .summary-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        grid-template-columns: minmax(180px, 320px);
         gap: 12px;
       }
 
@@ -136,95 +145,77 @@
         font-size: 28px;
       }
 
-      .ranking-list {
-        display: grid;
-        gap: 16px;
-      }
-
-      .ranking-group {
-        display: grid;
-        gap: 14px;
-        padding: 16px;
+      .table-wrap {
+        overflow: auto;
         border: 1px solid #334155;
-        border-radius: 12px;
-        background: #0f172a;
+        border-radius: 8px;
+        background: #020617;
       }
 
-      .group-header {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-        align-items: flex-start;
+      table {
+        width: 100%;
+        min-width: 1100px;
+        border-collapse: collapse;
       }
 
-      .medal-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 12px;
+      th,
+      td {
+        padding: 12px 10px;
+        border-bottom: 1px solid #1f2937;
+        text-align: left;
+        vertical-align: top;
+        white-space: nowrap;
       }
 
-      .medal-card {
-        display: grid;
-        gap: 8px;
-        padding: 16px;
-        border: 1px solid #334155;
-        border-radius: 12px;
+      th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
         background: #111827;
-      }
-
-      .medal-card.gold {
-        border-color: #eab308;
-        background: linear-gradient(180deg, rgba(234,179,8,0.18), rgba(17,24,39,0.95));
-      }
-
-      .medal-card.silver {
-        border-color: #cbd5e1;
-        background: linear-gradient(180deg, rgba(203,213,225,0.18), rgba(17,24,39,0.95));
-      }
-
-      .medal-card.bronze {
-        border-color: #fb923c;
-        background: linear-gradient(180deg, rgba(251,146,60,0.18), rgba(17,24,39,0.95));
-      }
-
-      .medal-top {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        align-items: center;
-      }
-
-      .medal-code {
-        font-size: 26px;
-        font-weight: 900;
-      }
-
-      .place-badge {
-        min-width: 52px;
-        padding: 8px 10px;
-        border-radius: 999px;
-        background: #1e293b;
         color: #f8fafc;
-        text-align: center;
-        font-weight: 900;
-      }
-
-      .medal-name {
-        font-size: 18px;
-        font-weight: 800;
-      }
-
-      .medal-score {
-        font-size: 36px;
-        font-weight: 900;
-        color: #f8fafc;
-      }
-
-      .medal-meta {
-        color: #cbd5e1;
         font-size: 14px;
-        line-height: 1.5;
+      }
+
+      td {
+        color: #e5e7eb;
+      }
+
+      tr:nth-child(even) td {
+        background: #08111f;
+      }
+
+      .content-row td {
+        padding-top: 18px;
+        background: #162033;
+        color: #f8fafc;
+        font-size: 17px;
+        font-weight: 900;
+      }
+
+      .content-row + tr td {
+        border-top: 1px solid #475569;
+      }
+
+      .medal-cell {
+        font-weight: 900;
+      }
+
+      .medal-cell.HCV {
+        color: #facc15;
+      }
+
+      .medal-cell.HCB {
+        color: #e5e7eb;
+      }
+
+      .medal-cell.HCD {
+        color: #fb923c;
+      }
+
+      .name-cell {
+        min-width: 220px;
+        white-space: normal;
+        font-weight: 800;
       }
 
       .empty {
@@ -232,9 +223,7 @@
       }
 
       @media (max-width: 720px) {
-        header,
-        .group-header,
-        .medal-top {
+        header {
           display: grid;
         }
       }
@@ -247,6 +236,7 @@
         <p class="muted">Hội diễn hiển thị top 4 huy chương: 1 vàng, 1 bạc, 2 đồng giải ba.</p>
       </div>
       <div class="actions">
+        <a class="success" href="/api/rankings/performance/export.csv">Xuất Excel</a>
         <a class="secondary" href="/">Dashboard</a>
       </div>
     </header>
@@ -288,12 +278,6 @@
       const performanceSummary = document.getElementById('performanceSummary');
       const performanceRankingList = document.getElementById('performanceRankingList');
 
-      const medalCardClass = {
-        HCV: 'gold',
-        HCB: 'silver',
-        HCD: 'bronze',
-      };
-
       function setStatus(message, type = '') {
         statusEl.textContent = message;
         statusEl.className = `status ${type}`.trim();
@@ -316,32 +300,24 @@
         combatTabButton.classList.toggle('active', !isPerformance);
       }
 
-      function renderPerformanceSummary(groups) {
-        const totalCategories = groups.length;
-        const totalAwarded = groups.reduce((sum, group) => (
-          sum + group.medalists.filter((item) => item.result).length
-        ), 0);
-        const totalAthletes = groups.reduce((sum, group) => sum + Number(group.totalResults || 0), 0);
+      function renderPerformanceSummary(groups, totalGroups = null) {
+        const rankedGroups = groups.length;
+        const denominator = Number.isInteger(Number(totalGroups)) && Number(totalGroups) >= rankedGroups
+          ? Number(totalGroups)
+          : rankedGroups;
 
         performanceSummary.innerHTML = `
           <div class="summary-card">
-            Nội dung đã có xếp hạng
-            <strong>${totalCategories}</strong>
-          </div>
-          <div class="summary-card">
-            Tổng lượt đã có điểm
-            <strong>${totalAthletes}</strong>
-          </div>
-          <div class="summary-card">
-            Suất huy chương đang hiển thị
-            <strong>${totalAwarded}</strong>
+            Nội dung đã xếp hạng
+            <strong>${rankedGroups}/${denominator}</strong>
           </div>
         `;
       }
 
-      function renderPerformanceGroups(groups) {
+      function renderPerformanceGroups(groups, totalGroups = null) {
+        renderPerformanceSummary(groups, totalGroups);
+
         if (!groups.length) {
-          performanceSummary.innerHTML = '';
           performanceRankingList.innerHTML = `
             <section class="panel">
               <div class="empty">Chưa có kết quả hội diễn nào để xếp hạng. Khi chấm xong một lượt và TT tổng bấm Next, kết quả sẽ xuất hiện ở đây.</div>
@@ -350,47 +326,42 @@
           return;
         }
 
-        renderPerformanceSummary(groups);
+        const rows = groups.flatMap((group) => (
+          [`
+            <tr class="content-row">
+              <td colspan="4">Nội dung: ${escapeHtml(group.routineName || '--')}${group.genderGroup ? ` - ${escapeHtml(group.genderGroup)}` : ''}</td>
+            </tr>
+          `].concat(group.medalists.map((slot) => {
+            const result = slot.result;
+            return `
+              <tr>
+                <td>Hạng ${escapeHtml(slot.rank)}</td>
+                <td class="medal-cell ${escapeHtml(slot.medalCode)}">${escapeHtml(slot.medalLabel)} (${escapeHtml(slot.medalCode)})</td>
+                <td>${escapeHtml(result?.unit || '--')}</td>
+                <td>${escapeHtml(result?.totalScore ?? '--')}</td>
+              </tr>
+            `;
+          }))
+        ));
 
-        performanceRankingList.innerHTML = groups.map((group) => `
-          <section class="ranking-group">
-            <div class="group-header">
-              <div>
-                <h2>${escapeHtml(group.title)}</h2>
-                <div class="muted">${escapeHtml(group.totalResults)} lượt đã có điểm • Cập nhật: ${group.updatedAt ? new Date(group.updatedAt).toLocaleString('vi-VN') : '--'}</div>
-              </div>
-            </div>
-            <div class="medal-grid">
-              ${group.medalists.map((slot) => {
-                const result = slot.result;
-                return `
-                  <article class="medal-card ${escapeHtml(medalCardClass[slot.medalCode] || '')}">
-                    <div class="medal-top">
-                      <div>
-                        <div class="medal-code">${escapeHtml(slot.medalCode)}</div>
-                        <div class="muted">${escapeHtml(slot.medalLabel)}</div>
-                      </div>
-                      <div class="place-badge">Hạng ${slot.rank}</div>
-                    </div>
-                    ${result ? `
-                      <div class="medal-name">${escapeHtml(result.displayName)}</div>
-                      <div class="medal-score">${escapeHtml(result.totalScore)}</div>
-                      <div class="medal-meta">
-                        Đơn vị: ${escapeHtml(result.unit || '--')}<br />
-                        Sân: ${escapeHtml(result.court || '--')}<br />
-                        Nội dung: ${escapeHtml(result.routineName || '--')}
-                      </div>
-                    ` : `
-                      <div class="medal-name">Chưa có kết quả</div>
-                      <div class="medal-score">--</div>
-                      <div class="medal-meta">Suất huy chương này chưa có VĐV/đội đạt vào.</div>
-                    `}
-                  </article>
-                `;
-              }).join('')}
+        performanceRankingList.innerHTML = `
+          <section class="panel">
+            <h2>Bảng xếp hạng hội diễn</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Xếp hạng</th>
+                    <th>Huy chương</th>
+                    <th>Đơn vị</th>
+                    <th>Số điểm</th>
+                  </tr>
+                </thead>
+                <tbody>${rows.join('')}</tbody>
+              </table>
             </div>
           </section>
-        `).join('');
+        `;
       }
 
       async function loadPerformanceRankings() {
@@ -401,7 +372,7 @@
           throw new Error(data.error || 'Không tải được xếp hạng hội diễn.');
         }
 
-        renderPerformanceGroups(data.groups || []);
+        renderPerformanceGroups(data.groups || [], data.totalGroups);
         setStatus('Đã tải xếp hạng hội diễn.', 'ok');
       }
 
@@ -416,7 +387,7 @@
       const events = new EventSource('/api/events?type=performance-ranking');
       events.addEventListener('performanceRankingSnapshot', (event) => {
         const payload = JSON.parse(event.data);
-        renderPerformanceGroups(payload.groups || []);
+        renderPerformanceGroups(payload.groups || [], payload.totalGroups);
         setStatus('Xếp hạng hội diễn đã đồng bộ realtime.', 'ok');
       });
 

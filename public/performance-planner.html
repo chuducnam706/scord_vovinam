@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Xếp Hội Diễn</title>
+    <title>Tạo Nhóm Hội Diễn</title>
     <style>
       * {
         box-sizing: border-box;
@@ -255,11 +255,12 @@
   <body>
     <header>
       <div>
-        <h1>Xếp Nội Dung Hội Diễn</h1>
-        <div class="muted">Chọn batch import, lọc theo lứa tuổi và bài quyền Vovinam, rồi đổi thứ tự thi ngay trên màn hình.</div>
+        <h1>Tạo Nhóm Hội Diễn</h1>
+        <div class="muted">Chọn batch import, lọc theo lứa tuổi + bài quyền + giới tính, rồi lưu thành nhóm để đưa vào sân.</div>
       </div>
       <div class="actions">
         <a class="secondary" href="/import.html">Import dữ liệu</a>
+        <a class="secondary" href="/performance-dispatch.html">Chia sân</a>
         <a class="secondary" href="/">Dashboard</a>
       </div>
     </header>
@@ -315,13 +316,13 @@
         </div>
         <div class="actions">
           <button id="filterButton" type="button" disabled>Lọc danh sách</button>
-          <button class="success" id="saveButton" type="button" disabled>Lưu thứ tự thi</button>
+          <button class="success" id="saveButton" type="button" disabled>Lưu nhóm thi</button>
         </div>
-        <div class="muted" id="filterNote">Hệ thống tự gom theo đúng lứa tuổi + bài quyền + đơn vị.</div>
+        <div class="muted" id="filterNote">Hệ thống giữ thứ tự theo file import, chỉ gom thành nhóm để chia sân.</div>
       </section>
 
       <section class="panel">
-        <h2>Kết Quả Sắp Xếp</h2>
+        <h2>Kết Quả Gom Nhóm</h2>
         <div class="muted" id="resultSummary">Chưa có danh sách.</div>
         <div class="table-wrap">
           <table>
@@ -332,12 +333,11 @@
                 <th>Đơn vị</th>
                 <th>Lứa tuổi</th>
                 <th>Bài quyền</th>
-                <th>Đổi thứ tự</th>
               </tr>
             </thead>
             <tbody id="resultBody">
               <tr>
-                <td class="empty" colspan="6">Chọn batch, lứa tuổi và bài quyền để lọc danh sách.</td>
+                <td class="empty" colspan="5">Chọn batch, lứa tuổi và bài quyền để lọc danh sách.</td>
               </tr>
             </tbody>
           </table>
@@ -539,6 +539,7 @@
         detectedColumns.innerHTML = '';
         const labels = [
           ['age', 'Lứa tuổi'],
+          ['gender', 'Giới tính'],
           ['routine', 'Bài quyền'],
           ['name', 'Tên VĐV/Đội'],
           ['unit', 'Đơn vị'],
@@ -557,7 +558,7 @@
         resultBody.innerHTML = '';
 
         if (currentEntries.length === 0) {
-          resultBody.innerHTML = '<tr><td class="empty" colspan="6">Không có VĐV nào khớp nhóm thi này.</td></tr>';
+          resultBody.innerHTML = '<tr><td class="empty" colspan="5">Không có VĐV nào khớp nhóm thi này.</td></tr>';
           saveButton.disabled = true;
           resultSummary.textContent = currentFilter
             ? `Đã lọc nhưng chưa có dữ liệu phù hợp cho ${currentFilter.ageGroup} - ${currentFilter.routineName}.`
@@ -569,16 +570,22 @@
           total + Number(entry.participantCount || entry.memberNames?.length || 1)
         ), 0);
         const warningCount = currentEntries.filter((entry) => entry.needsAttention).length;
-        resultSummary.textContent = `${currentEntries.length} lượt thi • ${totalAthletes} VĐV • ${currentFilter.memberCount} VĐV/đội. ${warningCount ? `Có ${warningCount} đội chưa đủ dữ liệu, cần kiểm tra trước khi lưu.` : 'Có thể bấm ↑ ↓ để đổi thứ tự trước khi lưu.'}`;
+        const genderText = (currentFilter.genderGroups || [])
+          .map((group) => `${group.genderGroup || 'Không rõ'}: ${group.entries.length} lượt`)
+          .join(' • ');
+        resultSummary.textContent = `${currentEntries.length} lượt thi • ${totalAthletes} VĐV • ${currentFilter.memberCount} VĐV/đội${genderText ? ` • ${genderText}` : ''}. ${warningCount ? `Có ${warningCount} đội chưa đủ dữ liệu, cần kiểm tra trước khi lưu.` : 'Danh sách sẽ giữ nguyên thứ tự theo file import.'}`;
 
         currentEntries.forEach((entry, index) => {
           const tr = document.createElement('tr');
           tr.className = entry.needsAttention ? 'needs-attention' : '';
           const members = Array.isArray(entry.memberNames) ? entry.memberNames : [];
           const showMembers = Number(entry.expectedMemberCount || 1) > 1 || members.length > 1;
+          const previousEntry = currentEntries[index - 1];
+          const showGenderHeader = (entry.genderGroup || '') !== (previousEntry?.genderGroup || '');
           tr.innerHTML = `
             <td>${index + 1}</td>
             <td>
+              ${showGenderHeader ? `<div class="chip">${escapeHtml(entry.genderGroup || 'Không rõ giới tính')}</div>` : ''}
               <div class="entry-title">${escapeHtml(entry.displayName)}</div>
               ${showMembers ? `<div class="member-list">Thành viên: ${escapeHtml(entry.memberSummary || members.join(', '))}</div>` : ''}
               ${entry.needsAttention ? `<div class="entry-warning">${escapeHtml(entry.attentionReason || 'Nhóm này chưa đủ dữ liệu.')}</div>` : ''}
@@ -586,31 +593,12 @@
             <td>${escapeHtml(entry.unit)}</td>
             <td>${escapeHtml(entry.ageGroup)}</td>
             <td>${escapeHtml(entry.routineName)}</td>
-            <td>
-              <div class="inline-actions">
-                <button type="button" data-action="up" ${index === 0 ? 'disabled' : ''}>↑</button>
-                <button type="button" data-action="down" ${index === currentEntries.length - 1 ? 'disabled' : ''}>↓</button>
-              </div>
-            </td>
           `;
 
-          tr.querySelector('button[data-action="up"]').addEventListener('click', () => moveEntry(index, -1));
-          tr.querySelector('button[data-action="down"]').addEventListener('click', () => moveEntry(index, 1));
           resultBody.appendChild(tr);
         });
 
         saveButton.disabled = warningCount > 0;
-      }
-
-      function moveEntry(index, step) {
-        const nextIndex = index + step;
-        if (nextIndex < 0 || nextIndex >= currentEntries.length) return;
-
-        const copy = [...currentEntries];
-        const [picked] = copy.splice(index, 1);
-        copy.splice(nextIndex, 0, picked);
-        currentEntries = copy;
-        renderEntries();
       }
 
       function renderSavedSchedules(schedules) {
@@ -626,11 +614,12 @@
           row.className = 'history-item';
           row.innerHTML = `
             <div>
-              <div><strong>${escapeHtml(schedule.ageGroup)} - ${escapeHtml(schedule.routineName)}</strong></div>
+              <div><strong>${escapeHtml(schedule.ageGroup)}${schedule.genderGroup ? ` - ${escapeHtml(schedule.genderGroup)}` : ''} - ${escapeHtml(schedule.routineName)}</strong></div>
               <div class="muted">${escapeHtml(schedule.batchId)} | ${schedule.totalEntries} lượt${schedule.autoGrouped ? ` | ${schedule.memberCount} VĐV/đội` : ''} | ${new Date(schedule.updatedAt).toLocaleString('vi-VN')}</div>
             </div>
             <div class="history-actions">
               <a class="secondary" href="/mc-reader.html?groupId=${encodeURIComponent(schedule.groupId)}">Màn đọc</a>
+              <a class="secondary" href="/performance-dispatch.html">Chia sân</a>
               <button class="secondary" type="button" data-action="load">Nạp lại</button>
               <button class="danger" type="button" data-action="delete">Xóa</button>
             </div>
@@ -657,7 +646,7 @@
           });
 
           row.querySelector('button[data-action="delete"]').addEventListener('click', async () => {
-            const ok = window.confirm(`Xóa nhóm hội diễn "${schedule.ageGroup} - ${schedule.routineName}"?`);
+            const ok = window.confirm(`Xóa nhóm hội diễn "${schedule.ageGroup}${schedule.genderGroup ? ` - ${schedule.genderGroup}` : ''} - ${schedule.routineName}"?`);
             if (!ok) return;
 
             const response = await fetch(`/api/performance/planner/schedules/${encodeURIComponent(schedule.groupId)}`, {
@@ -872,13 +861,19 @@
           routineId,
           routineName: data.routine?.name || '',
           memberCount: Number(data.memberCount || memberCount),
+          genderGroups: data.genderGroups || [],
         };
-        currentEntries = data.entries || [];
+        currentEntries = (data.genderGroups || []).flatMap((group) => (
+          (group.entries || []).map((entry) => ({
+            ...entry,
+            genderGroup: group.genderGroup || entry.genderGroup || '',
+          }))
+        ));
         renderEntries();
         if (Number(data.incompleteEntries || 0) > 0) {
           setStatus(`Đã tự gom đội nhưng còn ${data.incompleteEntries} đội thiếu người hoặc thiếu đơn vị.`, 'error');
         } else if (data.savedSchedule) {
-          setStatus('Đã nạp lại thứ tự đã lưu trước đó.', 'ok');
+          setStatus('Đã nạp lại nhóm đã lưu trước đó.', 'ok');
         } else if (data.scheduleNeedsRegrouping) {
           setStatus('Số VĐV/đội đã thay đổi. Hệ thống đã gom lại danh sách, hãy kiểm tra rồi lưu.', 'ok');
         } else {
@@ -898,27 +893,38 @@
         }
 
         saveButton.disabled = true;
-        setStatus('Đang lưu thứ tự thi hội diễn...');
+        setStatus('Đang lưu nhóm thi hội diễn...');
 
-        const response = await fetch('/api/performance/planner/schedules', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            batchId: currentFilter.batchId,
-            ageGroup: currentFilter.ageGroup,
-            routineId: currentFilter.routineId,
-            entries: currentEntries,
-          }),
+        const groupsByGender = new Map();
+        currentEntries.forEach((entry) => {
+          const genderGroup = entry.genderGroup || '';
+          if (!groupsByGender.has(genderGroup)) groupsByGender.set(genderGroup, []);
+          groupsByGender.get(genderGroup).push(entry);
         });
-        const data = await response.json();
-        saveButton.disabled = false;
 
-        if (!response.ok) {
-          setStatus(data.error || 'Không lưu được thứ tự thi.', 'error');
-          return;
+        for (const [genderGroup, entries] of groupsByGender.entries()) {
+          const response = await fetch('/api/performance/planner/schedules', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              batchId: currentFilter.batchId,
+              ageGroup: currentFilter.ageGroup,
+              genderGroup,
+              routineId: currentFilter.routineId,
+              entries,
+            }),
+          });
+          const data = await response.json();
+
+          if (!response.ok) {
+            saveButton.disabled = false;
+            setStatus(data.error || `Không lưu được nhóm thi ${genderGroup || ''}.`, 'error');
+            return;
+          }
         }
 
-        setStatus('Đã lưu thứ tự thi hội diễn.', 'ok');
+        saveButton.disabled = false;
+        setStatus(`Đã lưu nhóm thi hội diễn${groupsByGender.size > 1 ? ` cho ${groupsByGender.size} nhóm giới tính.` : '.'} Qua màn Chia sân để gán nhóm vào sân.`, 'ok');
         await loadSavedSchedules();
       }
 
@@ -965,7 +971,7 @@
         batchSelect.value = preferredBatch.batchId;
         await loadPlannerOptions(batchSelect.value);
         if (preferredBatch.analysis?.plannerReady) {
-          setStatus('Đã nạp batch VĐV phù hợp. Chọn lứa tuổi và bài quyền để bắt đầu xếp hội diễn.', 'ok');
+          setStatus('Đã nạp batch VĐV phù hợp. Chọn lứa tuổi và bài quyền để tạo nhóm hội diễn.', 'ok');
         } else {
           setStatus(`Batch hiện tại là "${preferredBatch.fileName}" nhưng chưa có đủ cột Lứa tuổi/Nội dung. Hãy import lại file danh sách VĐV.`, 'error');
           filterNote.textContent = 'Ví dụ file đúng phải có các cột kiểu: Họ và tên, Đơn vị, Lứa tuổi, Nội dung thi đấu.';

@@ -106,7 +106,7 @@
 
       .judges {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(5, 1fr);
         gap: 8px;
       }
 
@@ -178,7 +178,7 @@
         blueJudges.innerHTML = '';
         redJudges.innerHTML = '';
 
-        for (let i = 1; i <= 4; i += 1) {
+        for (let i = 1; i <= 5; i += 1) {
           const blue = document.createElement('div');
           const red = document.createElement('div');
           blue.id = `blue-j${i}`;

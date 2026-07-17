@@ -193,6 +193,39 @@
         align-content: center;
       }
 
+      .chief-penalty {
+        display: none;
+        grid-column: 1 / -1;
+        padding: 14px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #111827;
+      }
+
+      body.chief-judge .chief-penalty {
+        display: block;
+      }
+
+      .penalty-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .penalty-buttons button {
+        min-height: 82px;
+        color: #ffffff;
+        font-size: clamp(24px, 5vw, 44px);
+      }
+
+      .penalty-buttons .blue-penalty {
+        background: #1e40af;
+      }
+
+      .penalty-buttons .red-penalty {
+        background: #991b1b;
+      }
+
       button {
         width: 100%;
         min-height: 110px;
@@ -261,6 +294,7 @@
             <option value="2">Trọng tài 2</option>
             <option value="3">Trọng tài 3</option>
             <option value="4">Trọng tài 4</option>
+            <option value="5">Trọng tài 5</option>
           </select>
         </label>
 
@@ -281,7 +315,6 @@
         <div class="buttons">
           <button data-side="blue" data-point="1">+1</button>
           <button data-side="blue" data-point="2">+2</button>
-          <button data-side="blue" data-point="3">+3</button>
         </div>
       </section>
 
@@ -290,7 +323,13 @@
         <div class="buttons">
           <button data-side="red" data-point="1">+1</button>
           <button data-side="red" data-point="2">+2</button>
-          <button data-side="red" data-point="3">+3</button>
+        </div>
+      </section>
+
+      <section class="chief-penalty" id="chiefPenaltyPanel">
+        <div class="penalty-buttons">
+          <button class="blue-penalty" type="button" data-penalty-side="blue">Xanh -1</button>
+          <button class="red-penalty" type="button" data-penalty-side="red">Đỏ -1</button>
         </div>
       </section>
     </main>
@@ -304,6 +343,7 @@
       const bluePanel = document.getElementById('bluePanel');
       const redPanel = document.getElementById('redPanel');
       const scoreButtons = Array.from(document.querySelectorAll('button[data-side]'));
+      const penaltyButtons = Array.from(document.querySelectorAll('button[data-penalty-side]'));
       const judgeSelect = document.getElementById('judgeSelect');
       const chiefLink = document.getElementById('chiefLink');
 
@@ -355,6 +395,7 @@
         setStatus('Chọn sân');
       } else {
         document.body.className = 'scoring';
+        if (judgeId === 1) document.body.classList.add('chief-judge');
         document.getElementById('judgeTitle').textContent = `Trọng tài ${judgeId}`;
         document.getElementById('matchTitle').textContent = `Sân ${court} - Trận: ${matchId}`;
         chiefLink.href = `/chief.html?court=${encodeURIComponent(court)}&matchId=${encodeURIComponent(matchId)}`;
@@ -387,8 +428,42 @@
           if (data.accepted) {
             setStatus(`Được công nhận +${point}`, 'ok');
           } else {
-            setStatus('Đã gửi, chờ đủ 3/4', 'warn');
+            setStatus('Đã gửi, chờ đủ 3/5', 'warn');
           }
+        }
+
+        async function applyPenalty(side) {
+          if (judgeId !== 1) {
+            setStatus('Chỉ Trọng tài 1 được trừ điểm', 'error');
+            return;
+          }
+
+          setStatus(`Đang trừ ${sideName(side)} -1...`, 'warn');
+
+          const response = await fetch(`/api/matches/${encodeURIComponent(matchId)}/penalty`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              matchId,
+              court,
+              judgeId,
+              side,
+              point: 1,
+              reason: 'Trọng tài chính trừ điểm',
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            setStatus(data.error || 'Không trừ được điểm', 'error');
+            return;
+          }
+
+          flash(side);
+          setStatus(`Đã trừ ${sideName(side)} -1`, 'ok');
         }
 
         const events = new EventSource(`/api/events?matchId=${encodeURIComponent(matchId)}`);
@@ -437,6 +512,12 @@
         scoreButtons.forEach((button) => {
           button.addEventListener('click', () => {
             submitVote(button.dataset.side, Number(button.dataset.point));
+          });
+        });
+
+        penaltyButtons.forEach((button) => {
+          button.addEventListener('click', () => {
+            applyPenalty(button.dataset.penaltySide);
           });
         });
       }

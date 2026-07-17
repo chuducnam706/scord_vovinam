@@ -246,8 +246,14 @@
       }
 
       .name-cell strong {
-        color: #f8fafc;
-        font-size: 16px;
+        display: block;
+        max-width: 620px;
+        color: #e8edf5;
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.45;
+        letter-spacing: 0.15px;
+        white-space: normal;
       }
 
       .cell-sub {
@@ -273,7 +279,7 @@
         <div class="muted">Hiển thị danh sách đã sắp xếp, kèm sân đã được điều phối để MC đọc.</div>
       </div>
       <div class="actions">
-        <a class="secondary" href="/performance-planner.html">Xếp hội diễn</a>
+        <a class="secondary" href="/performance-planner.html">Tạo nhóm hội diễn</a>
         <a class="secondary" href="/">Dashboard</a>
       </div>
     </header>
@@ -364,9 +370,22 @@
 
       function sortedSchedules() {
         return [...schedules].sort((a, b) => {
-          if (a.groupId === focusGroupId) return -1;
-          if (b.groupId === focusGroupId) return 1;
-          return new Date(b.updatedAt) - new Date(a.updatedAt);
+          const entryOrder = (schedule) => {
+            const entryOrders = (schedule.entries || [])
+              .flatMap((entry) => [entry.sourceRowIndex].concat(entry.sourceRowIndexes || []))
+              .map((value) => Number(value))
+              .filter((value) => Number.isInteger(value) && value >= 0);
+            if (entryOrders.length) return Math.min(...entryOrders);
+            return Number(schedule.sourceOrder ?? 999999);
+          };
+
+          const aOrder = entryOrder(a);
+          const bOrder = entryOrder(b);
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return String(a.routineName || '').localeCompare(String(b.routineName || ''), 'vi', {
+            numeric: true,
+            sensitivity: 'base',
+          });
         });
       }
 
@@ -431,9 +450,16 @@
           const isFocused = row.groupId === focusGroupId;
           const memberSummary = row.entry.memberSummary
             || (Array.isArray(row.entry.memberNames) ? row.entry.memberNames.join(', ') : '');
-          const subText = memberSummary && Number(row.entry.participantCount || 1) > 1
-            ? `Thành viên: ${memberSummary}`
-            : (row.groupId === focusGroupId ? 'Đang được mở từ danh sách vừa chọn' : 'Danh sách hội diễn đã lưu');
+          const expectedMemberCount = Number(row.entry.expectedMemberCount || row.entry.participantCount || 1);
+          const participantCount = Number(row.entry.participantCount || 1);
+          const isTeamContent = expectedMemberCount > 1
+            || participantCount > 1
+            || Boolean(memberSummary)
+            || String(row.entry.displayName || '').trim().toLowerCase().startsWith('đội ');
+          const mainText = isTeamContent ? (memberSummary || row.entry.displayName) : row.entry.displayName;
+          const subText = isTeamContent
+            ? ''
+            : (row.groupId === focusGroupId ? 'Đang được mở từ danh sách vừa chọn' : '');
           return `
             <tr class="row-${escapeHtml(statusClass)} ${isFocused ? 'focused-row' : ''}">
               <td><div class="order-badge">${index + 1}</div></td>
@@ -448,12 +474,15 @@
                   ${escapeHtml(statusLabels[row.currentStatus] || 'Chưa diễn ra')}
                 </button>
               </td>
-              <td>${escapeHtml(row.ageGroup)}</td>
-              <td>${escapeHtml(row.routineName)}</td>
+              <td>${escapeHtml(row.entry.ageGroup || row.ageGroup)}</td>
+              <td>
+                <div>${escapeHtml(row.routineName)}</div>
+                ${(row.entry.genderGroup || row.genderGroup) ? `<div class="cell-sub">${escapeHtml(row.entry.genderGroup || row.genderGroup)}</div>` : ''}
+              </td>
               <td>
                 <div class="name-cell">
-                  <strong>${escapeHtml(row.entry.displayName)}</strong>
-                  <div class="cell-sub">${escapeHtml(subText)}</div>
+                  <strong>${escapeHtml(mainText)}</strong>
+                  ${subText ? `<div class="cell-sub">${escapeHtml(subText)}</div>` : ''}
                 </div>
               </td>
               <td>${escapeHtml(row.entry.unit)}</td>
@@ -548,7 +577,7 @@
         if (!summaries.length) {
           schedules = [];
           renderEmpty('Chưa có danh sách hội diễn nào được lưu.');
-          setStatus('Chưa có danh sách hội diễn đã lưu. Hãy vào màn Xếp hội diễn để lưu trước.', 'error');
+          setStatus('Chưa có danh sách hội diễn đã lưu. Hãy vào màn Tạo nhóm hội diễn để lưu trước.', 'error');
           return;
         }
 

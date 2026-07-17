@@ -46,7 +46,7 @@
 
       main {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr;
         gap: 16px;
         padding: 16px;
       }
@@ -63,7 +63,6 @@
         font-size: 22px;
       }
 
-      .route-grid,
       .judge-grid {
         display: grid;
         grid-template-columns: 1fr;
@@ -91,20 +90,6 @@
         background: #334155;
       }
 
-      .penalty-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
-      }
-
-      button.blue-penalty {
-        background: #1d4ed8;
-      }
-
-      button.red-penalty {
-        background: #b91c1c;
-      }
-
       .flow {
         display: grid;
         gap: 10px;
@@ -120,7 +105,6 @@
           grid-template-columns: 1fr;
         }
 
-        .route-grid,
         .judge-grid {
           grid-template-columns: 1fr;
         }
@@ -138,21 +122,6 @@
 
     <main>
       <section class="panel">
-        <h2>Màn hình của sân</h2>
-        <div class="route-grid">
-          <a id="boardLink" href="#">Bảng điểm</a>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2>Trừ điểm</h2>
-        <div class="penalty-grid">
-          <button class="blue-penalty" type="button" data-penalty-side="blue">Xanh -1</button>
-          <button class="red-penalty" type="button" data-penalty-side="red">Đỏ -1</button>
-        </div>
-      </section>
-
-      <section class="panel">
         <h2>Trọng tài của sân</h2>
         <div class="judge-grid" id="judgeLinks"></div>
       </section>
@@ -164,11 +133,9 @@
       const matchId = params.get('matchId') || `COURT_${court}`;
       const judgeLinks = document.getElementById('judgeLinks');
       const statusEl = document.getElementById('status');
-      const penaltyButtons = Array.from(document.querySelectorAll('button[data-penalty-side]'));
 
       document.getElementById('courtTitle').textContent = `Sân ${court}`;
       document.getElementById('matchTitle').textContent = `Mã trận: ${matchId}`;
-      document.getElementById('boardLink').href = `/board.html?court=${encodeURIComponent(court)}&matchId=${encodeURIComponent(matchId)}`;
 
       function setStatus(message) {
         statusEl.textContent = message;
@@ -177,7 +144,7 @@
       function renderJudgeLinks() {
         judgeLinks.innerHTML = '';
 
-        for (let i = 1; i <= 4; i += 1) {
+        for (let i = 1; i <= 5; i += 1) {
           const link = document.createElement('a');
           link.href = `/referee.html?court=${encodeURIComponent(court)}&matchId=${encodeURIComponent(matchId)}&judgeId=${i}`;
           link.textContent = `Trọng tài ${i}`;
@@ -185,33 +152,10 @@
         }
       }
 
-      function sideName(side) {
-        return side === 'blue' ? 'Xanh' : 'Đỏ';
-      }
-
-      async function applyPenalty(side) {
-        setStatus(`Đang trừ ${sideName(side)}...`);
-        const response = await fetch(`/api/matches/${encodeURIComponent(matchId)}/penalty`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ side, point: 1, reason: 'Trọng tài chính trừ điểm' }),
-        });
-        const data = await response.json();
-        if (!response.ok) {
-          setStatus(data.error || 'Không trừ được điểm');
-          return;
-        }
-        setStatus(`Đã trừ ${sideName(side)} -1`);
-      }
-
       function loadCourt() {
         renderJudgeLinks();
         setStatus('Sẵn sàng');
       }
-
-      penaltyButtons.forEach((button) => {
-        button.addEventListener('click', () => applyPenalty(button.dataset.penaltySide));
-      });
 
       loadCourt();
     </script>

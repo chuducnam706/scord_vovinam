@@ -133,6 +133,17 @@
         font-weight: 800;
       }
 
+      .bulk-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .bulk-actions select {
+        min-width: 150px;
+      }
+
       .table-wrap {
         overflow: auto;
         border: 1px solid #333741;
@@ -213,7 +224,7 @@
     <header>
       <div>
         <h1>Chia sân hội diễn</h1>
-        <p class="muted">Màn này chỉ dùng để gán nội dung vào 6 sân. Không hiển thị số lượt/tiến độ.</p>
+        <p class="muted">Import danh sách xong, vào đây gán từng bài quyền/nội dung vào 6 sân.</p>
       </div>
       <div class="actions">
         <a class="performance-action" href="/arena.html">Điều phối sân</a>
@@ -226,18 +237,19 @@
       <div class="status" id="status">Đang tải danh sách hội diễn...</div>
 
       <section class="toolbar">
-        <div class="field">
-          <label for="courtFilter">Lọc sân</label>
-          <select id="courtFilter">
-            <option value="all">Tất cả</option>
-            <option value="unassigned">Chưa gán</option>
-            <option value="1">Sân 1</option>
-            <option value="2">Sân 2</option>
-            <option value="3">Sân 3</option>
-            <option value="4">Sân 4</option>
-            <option value="5">Sân 5</option>
-            <option value="6">Sân 6</option>
+        <div class="bulk-actions">
+          <select id="bulkCourtSelect">
+            <option value="">Gán tất cả</option>
+            <option value="1">Vào sân 1</option>
+            <option value="2">Vào sân 2</option>
+            <option value="3">Vào sân 3</option>
+            <option value="4">Vào sân 4</option>
+            <option value="5">Vào sân 5</option>
+            <option value="6">Vào sân 6</option>
+            <option value="clear">Bỏ gán tất cả</option>
           </select>
+          <button class="secondary" id="applyBulkCourtButton" type="button">Áp dụng</button>
+          <button class="success" id="saveAllButton" type="button" disabled>Lưu tất cả</button>
         </div>
         <div class="summary" id="summary">—</div>
       </section>
@@ -248,14 +260,13 @@
             <tr>
               <th>STT</th>
               <th>Nội dung / Bài quyền</th>
-              <th>Lứa tuổi</th>
               <th>Sân</th>
               <th>Hành động</th>
             </tr>
           </thead>
           <tbody id="scheduleRows">
             <tr>
-              <td colspan="5">Đang tải...</td>
+              <td colspan="4">Đang tải...</td>
             </tr>
           </tbody>
         </table>
@@ -266,8 +277,10 @@
       const statusEl = document.getElementById('status');
       const summaryEl = document.getElementById('summary');
       const scheduleRows = document.getElementById('scheduleRows');
-      const courtFilter = document.getElementById('courtFilter');
       const refreshButton = document.getElementById('refreshButton');
+      const bulkCourtSelect = document.getElementById('bulkCourtSelect');
+      const applyBulkCourtButton = document.getElementById('applyBulkCourtButton');
+      const saveAllButton = document.getElementById('saveAllButton');
 
       let dispatchData = { courts: [], schedules: [] };
 
@@ -297,20 +310,92 @@
       function renderSummary() {
         const schedules = dispatchData.schedules || [];
         const assigned = schedules.filter((schedule) => schedule.assignedCourt).length;
-        summaryEl.textContent = `Tổng ${schedules.length} nội dung • Đã gán ${assigned} • Chưa gán ${schedules.length - assigned}`;
+        summaryEl.textContent = `Đã gán ${assigned}/${schedules.length} nội dung • Chưa gán ${schedules.length - assigned}`;
+      }
+
+      function changedAssignments() {
+        return Array.from(scheduleRows.querySelectorAll('select[data-court-select]'))
+          .map((select) => ({
+            groupId: select.dataset.courtSelect,
+            currentCourt: String(select.dataset.currentCourt || ''),
+            nextCourt: String(select.value || ''),
+            select,
+          }))
+          .filter((item) => item.groupId && item.currentCourt !== item.nextCourt);
+      }
+
+      function updateDirtyState() {
+        const changed = changedAssignments();
+        saveAllButton.disabled = changed.length === 0;
+        saveAllButton.textContent = changed.length ? `Lưu tất cả (${changed.length})` : 'Lưu tất cả';
+      }
+
+      function setScheduleAssignment(groupId, court) {
+        const nextCourt = String(court || '');
+        const schedule = (dispatchData.schedules || []).find((item) => item.groupId === groupId);
+        if (schedule) schedule.assignedCourt = nextCourt || null;
+
+        const row = Array.from(scheduleRows.querySelectorAll('tr[data-group-id]'))
+          .find((item) => item.dataset.groupId === groupId);
+        if (!row) return;
+
+        row.classList.toggle('assigned', Boolean(nextCourt));
+
+        const badge = row.querySelector('.badge');
+        if (badge) {
+          badge.textContent = courtLabel(nextCourt);
+          badge.className = `badge ${nextCourt ? 'assigned' : 'empty'}`;
+        }
+
+        const select = row.querySelector('select[data-court-select]');
+        if (select) {
+          select.value = nextCourt;
+          select.dataset.currentCourt = nextCourt;
+        }
+      }
+
+      function setControlsDisabled(disabled) {
+        Array.from(scheduleRows.querySelectorAll('button, select')).forEach((el) => {
+          el.disabled = disabled;
+        });
+        bulkCourtSelect.disabled = disabled;
+        applyBulkCourtButton.disabled = disabled;
+        saveAllButton.disabled = disabled || changedAssignments().length === 0;
+      }
+
+      function applyBulkCourtToAll() {
+        const value = String(bulkCourtSelect.value || '');
+        if (!value) {
+          setStatus('Chọn sân cần gán trước.', 'error');
+          return;
+        }
+
+        const nextCourt = value === 'clear' ? '' : value;
+        if (nextCourt && !courtCanReceivePerformance(nextCourt)) {
+          setStatus(`Sân ${nextCourt} đang là đối kháng, không gán hội diễn vào được.`, 'error');
+          return;
+        }
+
+        const selects = Array.from(scheduleRows.querySelectorAll('select[data-court-select]'));
+        if (!selects.length) {
+          setStatus('Chưa có nội dung để gán sân.', 'error');
+          return;
+        }
+
+        selects.forEach((select) => {
+          select.value = nextCourt;
+        });
+        updateDirtyState();
+        setStatus(
+          nextCourt
+            ? `Đã chọn tất cả nội dung vào sân ${nextCourt}. Bấm Lưu tất cả để lưu.`
+            : 'Đã chọn bỏ gán tất cả nội dung. Bấm Lưu tất cả để lưu.',
+          'ok'
+        );
       }
 
       function filteredSchedules() {
-        const filter = courtFilter.value;
-        const schedules = dispatchData.schedules || [];
-
-        if (filter === 'unassigned') {
-          return schedules.filter((schedule) => !schedule.assignedCourt);
-        }
-        if (filter !== 'all') {
-          return schedules.filter((schedule) => String(schedule.assignedCourt || '') === filter);
-        }
-        return schedules;
+        return dispatchData.schedules || [];
       }
 
       function courtSelect(schedule) {
@@ -329,7 +414,8 @@
         renderSummary();
 
         if (!schedules.length) {
-          scheduleRows.innerHTML = '<tr><td colspan="5">Không có nội dung phù hợp.</td></tr>';
+          scheduleRows.innerHTML = '<tr><td colspan="4">Chưa có bài quyền/nội dung từ dữ liệu import.</td></tr>';
+          updateDirtyState();
           return;
         }
 
@@ -338,12 +424,12 @@
           const badgeClass = assignedCourt ? 'assigned' : 'empty';
 
           return `
-            <tr class="${assignedCourt ? 'assigned' : ''}">
+            <tr class="${assignedCourt ? 'assigned' : ''}" data-group-id="${escapeHtml(schedule.groupId)}">
               <td>${index + 1}</td>
               <td>
                 <div class="name">${escapeHtml(schedule.routineName || '')}</div>
+                <div class="muted">${Number(schedule.totalEntries || 0)} lượt thi</div>
               </td>
-              <td>${escapeHtml(schedule.ageGroup || '')}</td>
               <td><span class="badge ${badgeClass}">${escapeHtml(courtLabel(assignedCourt))}</span></td>
               <td>
                 <div class="assignment-cell">
@@ -358,6 +444,10 @@
         scheduleRows.querySelectorAll('button[data-save-assignment]').forEach((button) => {
           button.addEventListener('click', () => saveAssignment(button.dataset.saveAssignment));
         });
+        scheduleRows.querySelectorAll('select[data-court-select]').forEach((select) => {
+          select.addEventListener('change', updateDirtyState);
+        });
+        updateDirtyState();
       }
 
       async function loadDispatch(showOk = true) {
@@ -369,7 +459,15 @@
 
         dispatchData = data || { courts: [], schedules: [] };
         renderRows();
-        if (showOk) setStatus('Sẵn sàng chia sân hội diễn.', 'ok');
+        if (showOk) {
+          if (dispatchData.syncError) {
+            setStatus(dispatchData.syncError, 'error');
+          } else if (dispatchData.sourceBatch) {
+            setStatus(`Đã lấy bài quyền từ file import mới nhất: ${dispatchData.sourceBatch.fileName}.`, 'ok');
+          } else {
+            setStatus('Chưa có dữ liệu import. Hãy import danh sách VĐV trước.', 'error');
+          }
+        }
       }
 
       async function removeSchedule(court, groupId) {
@@ -423,19 +521,87 @@
           if (nextCourt) {
             await assignSchedule(nextCourt, groupId);
           }
-          await loadDispatch(false);
+          setScheduleAssignment(groupId, nextCourt);
+          renderSummary();
+          updateDirtyState();
           setStatus(nextCourt ? `Đã gán nội dung vào sân ${nextCourt}.` : 'Đã bỏ gán nội dung.', 'ok');
         } catch (error) {
           setStatus(error.message, 'error');
-          await loadDispatch(false).catch(() => {});
+          select.value = currentCourt;
+          updateDirtyState();
         }
       }
 
-      courtFilter.addEventListener('change', renderRows);
+      async function saveAllAssignments() {
+        const changes = changedAssignments();
+        if (!changes.length) {
+          setStatus('Không có thay đổi để lưu.', 'ok');
+          return;
+        }
+
+        const invalid = changes.find((item) => item.nextCourt && !courtCanReceivePerformance(item.nextCourt));
+        if (invalid) {
+          setStatus(`Sân ${invalid.nextCourt} đang là đối kháng, không gán hội diễn vào được.`, 'error');
+          invalid.select.value = invalid.currentCourt;
+          updateDirtyState();
+          return;
+        }
+
+        saveAllButton.disabled = true;
+        setControlsDisabled(true);
+
+        try {
+          setStatus(`Đang lưu ${changes.length} thay đổi phân sân...`);
+
+          for (const change of changes) {
+            if (change.currentCourt) {
+              await removeSchedule(change.currentCourt, change.groupId);
+            }
+          }
+
+          const assignmentsByCourt = new Map();
+          changes
+            .filter((change) => change.nextCourt)
+            .forEach((change) => {
+              if (!assignmentsByCourt.has(change.nextCourt)) assignmentsByCourt.set(change.nextCourt, []);
+              assignmentsByCourt.get(change.nextCourt).push(change.groupId);
+            });
+
+          for (const [court, groupIds] of assignmentsByCourt.entries()) {
+            const response = await fetch(`/api/performance/courts/${encodeURIComponent(court)}/assign-schedule`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ groupIds }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.error || `Không gán được nội dung vào sân ${court}.`);
+            }
+          }
+
+          changes.forEach((change) => {
+            setScheduleAssignment(change.groupId, change.nextCourt);
+          });
+          renderSummary();
+          updateDirtyState();
+          setStatus(`Đã lưu ${changes.length} thay đổi phân sân.`, 'ok');
+        } catch (error) {
+          setStatus(error.message, 'error');
+          changes.forEach((change) => {
+            change.select.value = change.currentCourt;
+          });
+          updateDirtyState();
+        } finally {
+          setControlsDisabled(false);
+        }
+      }
+
       refreshButton.addEventListener('click', () => {
         setStatus('Đang tải lại...');
         loadDispatch().catch((error) => setStatus(error.message, 'error'));
       });
+      applyBulkCourtButton.addEventListener('click', applyBulkCourtToAll);
+      saveAllButton.addEventListener('click', saveAllAssignments);
 
       loadDispatch().catch((error) => setStatus(error.message, 'error'));
     </script>
