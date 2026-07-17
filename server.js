@@ -78,6 +78,7 @@ const performanceCourtDisplays = new Map();
 const sseClients = new Map();
 const storage = {
   importedAthleteBatches: [],
+  combatSchedules: [],
   performanceSchedules: [],
   performanceRoutineBatches: [],
   performanceResults: [],
@@ -115,6 +116,52 @@ function slugifyText(value) {
     .slice(0, 80) || 'item';
 }
 
+const DEFAULT_COMBAT_TIMER_CONFIG = Object.freeze({
+  roundDurationSec: 120,
+  totalRounds: 2,
+  extraRoundDurationSec: 120,
+  restDurationSec: 60,
+});
+
+function boundedInteger(value, fallback, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+}
+
+function normalizeCombatTimerConfig(value = {}) {
+  return {
+    roundDurationSec: boundedInteger(value.roundDurationSec, DEFAULT_COMBAT_TIMER_CONFIG.roundDurationSec, 10, 3600),
+    totalRounds: boundedInteger(value.totalRounds, DEFAULT_COMBAT_TIMER_CONFIG.totalRounds, 1, 10),
+    extraRoundDurationSec: boundedInteger(value.extraRoundDurationSec, DEFAULT_COMBAT_TIMER_CONFIG.extraRoundDurationSec, 0, 3600),
+    restDurationSec: boundedInteger(value.restDurationSec, DEFAULT_COMBAT_TIMER_CONFIG.restDurationSec, 0, 1800),
+  };
+}
+
+function createCombatTimer(configValue = {}) {
+  const timerConfig = normalizeCombatTimerConfig(configValue);
+  return {
+    config: timerConfig,
+    phase: 'ready',
+    currentRound: 1,
+    isExtraRound: false,
+    running: false,
+    remainingSec: timerConfig.roundDurationSec,
+    endsAt: null,
+  };
+}
+
+function hydrateCombatTimer(value = {}) {
+  const timer = createCombatTimer(value.config || value);
+  const allowedPhases = ['ready', 'round', 'rest', 'extra_round', 'finished', 'tie'];
+  timer.phase = allowedPhases.includes(value.phase) ? value.phase : timer.phase;
+  timer.currentRound = boundedInteger(value.currentRound, 1, 1, 20);
+  timer.isExtraRound = Boolean(value.isExtraRound || timer.phase === 'extra_round');
+  timer.running = Boolean(value.running);
+  timer.remainingSec = boundedInteger(value.remainingSec, timer.remainingSec, 0, 3600);
+  timer.endsAt = timer.running && value.endsAt ? String(value.endsAt) : null;
+  return timer;
+}
+
 function serializeMatch(match) {
   return {
     matchId: match.matchId,
@@ -122,6 +169,7 @@ function serializeMatch(match) {
     round: match.round,
     scores: match.scores,
     winner: match.winner,
+    timer: match.timer,
     audit: match.audit,
     createdAt: match.createdAt,
     updatedAt: match.updatedAt,
@@ -138,6 +186,7 @@ function hydrateMatch(savedMatch) {
       red: Number(savedMatch.scores?.red || 0),
     },
     winner: savedMatch.winner || null,
+    timer: hydrateCombatTimer(savedMatch.timer),
     voteGroups: [],
     audit: Array.isArray(savedMatch.audit) ? savedMatch.audit : [],
     createdAt: savedMatch.createdAt || nowIso(),
@@ -192,6 +241,13 @@ function getDatabase() {
       match_id TEXT NOT NULL,
       status TEXT NOT NULL,
       assigned_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS combat_schedules (
+      schedule_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
 
@@ -639,6 +695,510 @@ function publicCourtState(court, requestedMode = '') {
 
 function publicCourts(requestedMode = '') {
   return Array.from({ length: COURT_COUNT }, (_, index) => publicCourtState(index + 1, requestedMode));
+}
+
+function normalizeCombatStatus(status) {
+  return ['pending', 'in_progress', 'completed'].includes(status) ? status : 'pending';
+}
+
+function parseCombatWinnerSource(value) {
+  const raw = String(value || '').trim();
+  const normalized = normalizeText(raw);
+  const match = /^thang\s*(?:tran\s*)?([0-9]+(?:[\.,][0-9]+)?)/i.exec(normalized);
+  if (!match) return null;
+  return {
+    matchNo: match[1].replace(',', '.'),
+    label: raw || `Thắng trận ${match[1]}`,
+  };
+}
+
+function normalizeCombatScheduleItem(item = {}, index = 0) {
+  const orderNumber = Number(item.orderNumber);
+  const redSource = item.redSourceMatchNo
+    ? { matchNo: String(item.redSourceMatchNo), label: item.redWaitingLabel || `Thắng trận ${item.redSourceMatchNo}` }
+    : parseCombatWinnerSource(item.redName);
+  const blueSource = item.blueSourceMatchNo
+    ? { matchNo: String(item.blueSourceMatchNo), label: item.blueWaitingLabel || `Thắng trận ${item.blueSourceMatchNo}` }
+    : parseCombatWinnerSource(item.blueName);
+  const redResolved = redSource ? Boolean(item.redResolved) : true;
+  const blueResolved = blueSource ? Boolean(item.blueResolved) : true;
+
+  return {
+    scheduleId: String(item.scheduleId || newId(`combat_${index + 1}`)).trim(),
+    sourceRowIndex: Number.isInteger(Number(item.sourceRowIndex)) ? Number(item.sourceRowIndex) : index,
+    orderNumber: Number.isFinite(orderNumber) ? orderNumber : index + 1,
+    matchNo: String(item.matchNo || item.orderNumber || index + 1).trim().slice(0, 80),
+    roundType: String(item.roundType || '').trim().slice(0, 160),
+    groupName: String(item.groupName || '').trim().slice(0, 120),
+    weightClass: String(item.weightClass || '').trim().slice(0, 200),
+    redName: String(item.redName || '').trim().slice(0, 240),
+    redUnit: String(item.redUnit || '').trim().slice(0, 240),
+    redSourceMatchNo: redSource?.matchNo || '',
+    redWaitingLabel: redSource?.label || '',
+    redResolved,
+    blueName: String(item.blueName || '').trim().slice(0, 240),
+    blueUnit: String(item.blueUnit || '').trim().slice(0, 240),
+    blueSourceMatchNo: blueSource?.matchNo || '',
+    blueWaitingLabel: blueSource?.label || '',
+    blueResolved,
+    winnerName: String(item.winnerName || '').trim().slice(0, 240),
+    winnerUnit: String(item.winnerUnit || '').trim().slice(0, 240),
+    winnerSide: ['red', 'blue'].includes(item.winnerSide) ? item.winnerSide : '',
+    assignedCourt: normalizeCourt(item.assignedCourt || '') || '',
+    status: normalizeCombatStatus(item.status),
+    startedAt: item.startedAt || null,
+    completedAt: item.completedAt || null,
+    createdAt: item.createdAt || nowIso(),
+    updatedAt: item.updatedAt || nowIso(),
+  };
+}
+
+function compareCombatSchedules(a, b) {
+  const aOrder = Number(a.orderNumber ?? a.sourceRowIndex ?? 999999);
+  const bOrder = Number(b.orderNumber ?? b.sourceRowIndex ?? 999999);
+  if (aOrder !== bOrder) return aOrder - bOrder;
+  return Number(a.sourceRowIndex || 0) - Number(b.sourceRowIndex || 0);
+}
+
+function publicCombatScheduleItem(item) {
+  return {
+    ...item,
+    ready: isCombatScheduleReady(item),
+    waitingReasons: combatWaitingReasons(item),
+  };
+}
+
+function persistCombatSchedule(item) {
+  const saved = normalizeCombatScheduleItem(item);
+  getDatabase().prepare(`
+    INSERT INTO combat_schedules (schedule_id, payload_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(schedule_id) DO UPDATE SET
+      payload_json = excluded.payload_json,
+      updated_at = excluded.updated_at
+  `).run(
+    saved.scheduleId,
+    JSON.stringify(saved),
+    saved.createdAt,
+    saved.updatedAt,
+  );
+  return saved;
+}
+
+function readCombatSchedulesFromDatabase() {
+  return getDatabase().prepare(`
+    SELECT payload_json
+    FROM combat_schedules
+    ORDER BY updated_at ASC
+  `).all()
+    .map((row, index) => {
+      try {
+        return normalizeCombatScheduleItem(JSON.parse(row.payload_json || '{}'), index);
+      } catch (error) {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort(compareCombatSchedules);
+}
+
+function saveCombatSchedules(items) {
+  const db = getDatabase();
+  db.exec('DELETE FROM combat_schedules');
+  storage.combatSchedules = items
+    .map((item, index) => persistCombatSchedule(normalizeCombatScheduleItem(item, index)))
+    .sort(compareCombatSchedules);
+  return storage.combatSchedules;
+}
+
+function getCombatSchedule(scheduleId) {
+  return storage.combatSchedules.find((item) => item.scheduleId === scheduleId) || null;
+}
+
+function combatReferenceMatches(schedule, reference) {
+  const ref = String(reference || '').trim();
+  if (!schedule || !ref) return false;
+  const refNumber = Number(ref);
+  return String(schedule.matchNo || '').trim() === ref
+    || String(schedule.orderNumber || '').trim() === ref
+    || (Number.isFinite(refNumber) && Number(schedule.orderNumber) === refNumber);
+}
+
+function findCombatScheduleByReference(reference) {
+  return storage.combatSchedules.find((schedule) => combatReferenceMatches(schedule, reference)) || null;
+}
+
+function combatSideReady(schedule, side) {
+  const source = schedule?.[`${side}SourceMatchNo`];
+  const resolved = schedule?.[`${side}Resolved`];
+  const name = String(schedule?.[`${side}Name`] || '').trim();
+  return Boolean(name && (!source || resolved));
+}
+
+function isCombatScheduleReady(schedule) {
+  return combatSideReady(schedule, 'red') && combatSideReady(schedule, 'blue');
+}
+
+function combatWaitingReasons(schedule) {
+  const reasons = [];
+  if (!combatSideReady(schedule, 'red')) {
+    reasons.push(schedule.redWaitingLabel || `Thắng trận ${schedule.redSourceMatchNo}`);
+  }
+  if (!combatSideReady(schedule, 'blue')) {
+    reasons.push(schedule.blueWaitingLabel || `Thắng trận ${schedule.blueSourceMatchNo}`);
+  }
+  return reasons.filter(Boolean);
+}
+
+function combatWinnerFromScheduleAndMatch(schedule, match) {
+  const scores = match?.scores || {};
+  let side = match?.winner?.side || schedule?.winnerSide || '';
+  if (!side && Number(scores.red) !== Number(scores.blue)) {
+    side = Number(scores.red || 0) > Number(scores.blue || 0) ? 'red' : 'blue';
+  }
+  if (!side && schedule?.winnerName) {
+    const winner = normalizeText(schedule.winnerName);
+    if (winner && winner === normalizeText(schedule.redName)) side = 'red';
+    if (winner && winner === normalizeText(schedule.blueName)) side = 'blue';
+  }
+  if (!['red', 'blue'].includes(side)) return null;
+  const name = String(schedule?.[`${side}Name`] || '').trim();
+  if (!name) return null;
+  return {
+    side,
+    name,
+    unit: String(schedule?.[`${side}Unit`] || '').trim(),
+  };
+}
+
+function resolveCombatDependentMatches(sourceSchedule, winner) {
+  if (!sourceSchedule || !winner?.name) return [];
+  const updated = [];
+  storage.combatSchedules.forEach((schedule) => {
+    const patch = {};
+    if (schedule.redSourceMatchNo && combatReferenceMatches(sourceSchedule, schedule.redSourceMatchNo)) {
+      patch.redName = winner.name;
+      patch.redUnit = winner.unit;
+      patch.redResolved = true;
+    }
+    if (schedule.blueSourceMatchNo && combatReferenceMatches(sourceSchedule, schedule.blueSourceMatchNo)) {
+      patch.blueName = winner.name;
+      patch.blueUnit = winner.unit;
+      patch.blueResolved = true;
+    }
+    if (Object.keys(patch).length) {
+      const saved = updateCombatSchedule(schedule.scheduleId, patch);
+      if (saved) updated.push(saved);
+    }
+  });
+  return updated;
+}
+
+const combatImportAliases = {
+  orderNumber: ['stt tran', 'stt', 'thu tu', 'thutu'],
+  matchNo: ['so tran', 'sotran', 'ma tran', 'matran', 'tran'],
+  roundType: ['loai tran', 'loaitran', 'vong dau', 'vong'],
+  groupName: ['nhom', 'bang'],
+  weightClass: ['hang can', 'hangcan', 'noi dung', 'noidung'],
+  redName: ['vdv do', 'vdvdo', 'do', 'van dong vien do'],
+  redUnit: ['don vi do', 'donvido', 'clb do'],
+  blueName: ['vdv xanh', 'vdvxanh', 'xanh', 'van dong vien xanh'],
+  blueUnit: ['don vi xanh', 'donvixanh', 'clb xanh'],
+  winnerName: ['thang tran', 'thangtran', 'vdv thang', 'nguoi thang', 'ket qua'],
+};
+
+function detectCombatHeaderRow(rows) {
+  let best = { index: -1, score: 0 };
+  rows.forEach((row, index) => {
+    const columns = row.map((cell) => String(cell || '').trim());
+    const redIndex = findColumnIndexByAliases(columns, combatImportAliases.redName);
+    const blueIndex = findColumnIndexByAliases(columns, combatImportAliases.blueName);
+    const weightIndex = findColumnIndexByAliases(columns, combatImportAliases.weightClass);
+    const score = (redIndex >= 0 ? 2 : 0) + (blueIndex >= 0 ? 2 : 0) + (weightIndex >= 0 ? 1 : 0);
+    if (score > best.score) best = { index, score };
+  });
+  return best.score >= 4 ? best.index : -1;
+}
+
+function parseCombatSchedulesFromImportedFile(parsedFile) {
+  const allRows = [parsedFile.columns || []].concat(parsedFile.rows || []);
+  const headerIndex = detectCombatHeaderRow(allRows);
+  if (headerIndex < 0) {
+    throw new Error('Không nhận diện được cột VĐV đỏ / VĐV xanh / hạng cân trong file đối kháng.');
+  }
+
+  const columns = allRows[headerIndex].map((cell, index) => String(cell || `Cột ${index + 1}`).trim());
+  const rows = allRows.slice(headerIndex + 1);
+  const indexes = Object.fromEntries(
+    Object.entries(combatImportAliases).map(([key, aliases]) => [key, findColumnIndexByAliases(columns, aliases)]),
+  );
+
+  if (indexes.redName < 0 || indexes.blueName < 0 || indexes.weightClass < 0) {
+    throw new Error('File cần có tối thiểu cột Hạng cân, VĐV đỏ và VĐV xanh.');
+  }
+
+  const importedAt = nowIso();
+  const schedules = rows
+    .map((row, index) => {
+      const redName = getRowCell(row, indexes.redName);
+      const blueName = getRowCell(row, indexes.blueName);
+      const weightClass = getRowCell(row, indexes.weightClass);
+      if (!redName && !blueName) return null;
+      const rawOrder = getRowCell(row, indexes.orderNumber);
+      const numericOrder = Number(String(rawOrder || '').replace(',', '.'));
+      return normalizeCombatScheduleItem({
+        scheduleId: `combat_${slugifyText(parsedFile.fileName)}_${headerIndex + index + 1}_${slugifyText(redName)}_${slugifyText(blueName)}`,
+        sourceRowIndex: headerIndex + index + 1,
+        orderNumber: Number.isFinite(numericOrder) ? numericOrder : index + 1,
+        matchNo: getRowCell(row, indexes.matchNo) || rawOrder || String(index + 1),
+        roundType: getRowCell(row, indexes.roundType),
+        groupName: getRowCell(row, indexes.groupName),
+        weightClass,
+        redName,
+        redUnit: getRowCell(row, indexes.redUnit),
+        blueName,
+        blueUnit: getRowCell(row, indexes.blueUnit),
+        winnerName: getRowCell(row, indexes.winnerName),
+        status: 'pending',
+        createdAt: importedAt,
+        updatedAt: importedAt,
+      }, index);
+    })
+    .filter(Boolean)
+    .sort(compareCombatSchedules);
+
+  if (!schedules.length) {
+    throw new Error('Không tìm thấy trận đối kháng hợp lệ trong file.');
+  }
+
+  return {
+    fileName: parsedFile.fileName,
+    fileType: parsedFile.fileType,
+    sheetName: parsedFile.sheetName,
+    columns,
+    detectedColumns: indexes,
+    schedules,
+  };
+}
+
+function combatSchedulesForCourt(court) {
+  const normalizedCourt = normalizeCourt(court);
+  if (!normalizedCourt) return [];
+  return storage.combatSchedules
+    .filter((item) => String(item.assignedCourt || '') === normalizedCourt)
+    .sort(compareCombatSchedules);
+}
+
+function activeCombatScheduleForCourt(court) {
+  const schedules = combatSchedulesForCourt(court);
+  return schedules.find((item) => item.status === 'in_progress')
+    || schedules.find((item) => item.status === 'pending')
+    || [...schedules].reverse().find((item) => item.status === 'completed')
+    || null;
+}
+
+function publicCombatCourtDisplay(court) {
+  const normalizedCourt = normalizeCourt(court);
+  const queue = combatSchedulesForCourt(normalizedCourt);
+  const current = activeCombatScheduleForCourt(normalizedCourt);
+  const currentIndex = current ? queue.findIndex((item) => item.scheduleId === current.scheduleId) : -1;
+  const counts = queue.reduce((acc, item) => {
+    acc[normalizeCombatStatus(item.status)] += 1;
+    return acc;
+  }, { pending: 0, in_progress: 0, completed: 0 });
+
+  return {
+    court: normalizedCourt,
+    matchId: normalizedCourt ? defaultMatchIdForMode('combat', normalizedCourt) : '',
+    hasSchedule: Boolean(queue.length),
+    currentMatch: current ? publicCombatScheduleItem(current) : null,
+    currentIndex,
+    queue: queue.map(publicCombatScheduleItem),
+    counts,
+    totalMatches: queue.length,
+    nextMatch: queue.find((item) => item.status === 'pending') || null,
+  };
+}
+
+function buildCombatDispatchData() {
+  const schedules = storage.combatSchedules
+    .slice()
+    .sort(compareCombatSchedules)
+    .map(publicCombatScheduleItem);
+
+  const courts = Array.from({ length: COURT_COUNT }, (_, index) => {
+    const court = String(index + 1);
+    return {
+      ...publicCourtState(court, 'combat'),
+      combat: publicCombatCourtDisplay(court),
+    };
+  });
+
+  return {
+    schedules,
+    courts,
+    total: schedules.length,
+    assigned: schedules.filter((item) => item.assignedCourt).length,
+  };
+}
+
+function updateCombatSchedule(scheduleId, patch = {}) {
+  const index = storage.combatSchedules.findIndex((item) => item.scheduleId === scheduleId);
+  if (index < 0) return null;
+  const next = persistCombatSchedule({
+    ...storage.combatSchedules[index],
+    ...patch,
+    updatedAt: nowIso(),
+  });
+  storage.combatSchedules[index] = next;
+  storage.combatSchedules.sort(compareCombatSchedules);
+  return next;
+}
+
+function assignCombatSchedulesToCourt(court, scheduleIdsInput) {
+  const normalizedCourt = normalizeCourt(court);
+  if (!normalizedCourt) {
+    return { statusCode: 400, payload: { error: `court must be 1-${COURT_COUNT}` } };
+  }
+
+  const scheduleIds = Array.from(new Set(
+    (Array.isArray(scheduleIdsInput) ? scheduleIdsInput : [scheduleIdsInput])
+      .map((item) => String(item || '').trim())
+      .filter(Boolean),
+  ));
+  if (!scheduleIds.length) return { statusCode: 400, payload: { error: 'Chọn ít nhất một trận đối kháng.' } };
+
+  const schedules = scheduleIds.map((scheduleId) => getCombatSchedule(scheduleId));
+  if (schedules.some((item) => !item)) {
+    return { statusCode: 404, payload: { error: 'Không tìm thấy trận đối kháng.' } };
+  }
+
+  const conflictCourt = storage.combatSchedules.find((item) => (
+    scheduleIds.includes(item.scheduleId)
+    && item.assignedCourt
+    && item.assignedCourt !== normalizedCourt
+  ));
+  if (conflictCourt) {
+    return {
+      statusCode: 409,
+      payload: { error: `Trận này đang được gán cho sân ${conflictCourt.assignedCourt}.` },
+    };
+  }
+
+  const ensured = assignCourt(normalizedCourt, 'combat');
+  if (ensured.statusCode >= 400) return ensured;
+
+  scheduleIds.forEach((scheduleId) => updateCombatSchedule(scheduleId, { assignedCourt: normalizedCourt }));
+  broadcast(defaultMatchIdForMode('combat', normalizedCourt), 'combatDisplay', publicCombatCourtDisplay(normalizedCourt));
+  broadcast(defaultMatchIdForMode('combat', normalizedCourt), 'snapshot', publicMatch(getMatch(defaultMatchIdForMode('combat', normalizedCourt))));
+  broadcastMcCourt(normalizedCourt);
+
+  return {
+    statusCode: 200,
+    payload: {
+      saved: true,
+      court: normalizedCourt,
+      display: publicCombatCourtDisplay(normalizedCourt),
+      schedules: storage.combatSchedules.map(publicCombatScheduleItem),
+    },
+  };
+}
+
+function removeCombatScheduleFromCourt(court, scheduleId) {
+  const normalizedCourt = normalizeCourt(court);
+  if (!normalizedCourt) return { statusCode: 400, payload: { error: `court must be 1-${COURT_COUNT}` } };
+  const schedule = getCombatSchedule(scheduleId);
+  if (!schedule) return { statusCode: 404, payload: { error: 'Không tìm thấy trận đối kháng.' } };
+  if (schedule.assignedCourt !== normalizedCourt) {
+    return { statusCode: 200, payload: { removed: false, display: publicCombatCourtDisplay(normalizedCourt) } };
+  }
+  updateCombatSchedule(scheduleId, { assignedCourt: '', status: 'pending', startedAt: null, completedAt: null });
+  broadcast(defaultMatchIdForMode('combat', normalizedCourt), 'combatDisplay', publicCombatCourtDisplay(normalizedCourt));
+  broadcast(defaultMatchIdForMode('combat', normalizedCourt), 'snapshot', publicMatch(getMatch(defaultMatchIdForMode('combat', normalizedCourt))));
+  return { statusCode: 200, payload: { removed: true, display: publicCombatCourtDisplay(normalizedCourt) } };
+}
+
+function clearCombatSchedulesFromCourt(court) {
+  const normalizedCourt = normalizeCourt(court);
+  if (!normalizedCourt) return { statusCode: 400, payload: { error: `court must be 1-${COURT_COUNT}` } };
+  combatSchedulesForCourt(normalizedCourt).forEach((item) => {
+    updateCombatSchedule(item.scheduleId, { assignedCourt: '', status: 'pending', startedAt: null, completedAt: null });
+  });
+  resetMatch(defaultMatchIdForMode('combat', normalizedCourt));
+  broadcast(defaultMatchIdForMode('combat', normalizedCourt), 'combatDisplay', publicCombatCourtDisplay(normalizedCourt));
+  return { statusCode: 200, payload: { cleared: true, display: publicCombatCourtDisplay(normalizedCourt) } };
+}
+
+function advanceCombatScheduleForCourt(court) {
+  const normalizedCourt = normalizeCourt(court);
+  if (!normalizedCourt) return { statusCode: 400, payload: { error: `court must be 1-${COURT_COUNT}` } };
+  const ensured = assignCourt(normalizedCourt, 'combat');
+  if (ensured.statusCode >= 400) return ensured;
+
+  const queue = combatSchedulesForCourt(normalizedCourt);
+  if (!queue.length) return { statusCode: 404, payload: { error: 'Sân này chưa có trận đối kháng.' } };
+
+  const now = nowIso();
+  const current = queue.find((item) => item.status === 'in_progress');
+  const matchId = defaultMatchIdForMode('combat', normalizedCourt);
+  const match = getMatch(matchId);
+  if (current) {
+    const winner = combatWinnerFromScheduleAndMatch(current, match);
+    if (!winner) {
+      return {
+        statusCode: 409,
+        payload: {
+          error: 'Chưa xác định được người thắng trận hiện tại. Điểm đang hòa hoặc chưa có điểm.',
+          display: publicCombatCourtDisplay(normalizedCourt),
+          match: publicMatch(match),
+        },
+      };
+    }
+    updateCombatSchedule(current.scheduleId, {
+      status: 'completed',
+      completedAt: now,
+      winnerName: winner.name,
+      winnerUnit: winner.unit,
+      winnerSide: winner.side,
+    });
+    const resolved = resolveCombatDependentMatches(current, winner);
+    resolved.forEach((schedule) => {
+      if (schedule.assignedCourt) {
+        broadcast(defaultMatchIdForMode('combat', schedule.assignedCourt), 'combatDisplay', publicCombatCourtDisplay(schedule.assignedCourt));
+        broadcast(defaultMatchIdForMode('combat', schedule.assignedCourt), 'snapshot', publicMatch(getMatch(defaultMatchIdForMode('combat', schedule.assignedCourt))));
+      }
+    });
+  }
+
+  const next = combatSchedulesForCourt(normalizedCourt).find((item) => item.status === 'pending');
+  if (next) {
+    if (!isCombatScheduleReady(next)) {
+      const display = publicCombatCourtDisplay(normalizedCourt);
+      broadcast(matchId, 'combatDisplay', display);
+      return {
+        statusCode: 409,
+        payload: {
+          error: `Trận tiếp theo chưa đủ VĐV: còn chờ ${combatWaitingReasons(next).join(', ')}.`,
+          display,
+          match: publicMatch(match),
+        },
+      };
+    }
+    updateCombatSchedule(next.scheduleId, { status: 'in_progress', startedAt: next.startedAt || now });
+  }
+
+  const reset = resetMatch(matchId);
+  const display = publicCombatCourtDisplay(normalizedCourt);
+  broadcast(matchId, 'combatDisplay', display);
+  broadcastMcCourt(normalizedCourt);
+  return {
+    statusCode: 200,
+    payload: {
+      advanced: Boolean(next),
+      display,
+      match: publicMatch(reset),
+    },
+  };
 }
 
 function assignCourt(court, mode) {
@@ -2242,6 +2802,7 @@ function exportPerformanceRankingCsv(res) {
 function resetCompetitionData() {
   const deleted = {
     importedAthleteBatches: storage.importedAthleteBatches.length,
+    combatSchedules: storage.combatSchedules.length,
     performanceRoutineBatches: storage.performanceRoutineBatches.length,
     performanceSchedules: storage.performanceSchedules.length,
     performanceResults: storage.performanceResults.length,
@@ -2263,6 +2824,7 @@ function resetCompetitionData() {
     DELETE FROM performance_routine_batches;
     DELETE FROM mc_court_states;
     DELETE FROM court_assignments;
+    DELETE FROM combat_schedules;
     DELETE FROM matches;
     DELETE FROM import_batches;
     DELETE FROM app_settings WHERE setting_key = 'tournament_info';
@@ -2270,6 +2832,7 @@ function resetCompetitionData() {
 
   storage.tournamentInfo = normalizeTournamentInfo();
   storage.importedAthleteBatches = [];
+  storage.combatSchedules = [];
   storage.performanceRoutineBatches = [];
   storage.performanceResults = [];
   storage.performanceSchedules = [];
@@ -2286,6 +2849,7 @@ function resetCompetitionData() {
     .forEach((court) => {
       broadcastMcCourt(court);
       broadcastPerformanceCourtDisplay(court);
+      broadcast(defaultMatchIdForMode('combat', court), 'combatDisplay', publicCombatCourtDisplay(court));
     });
   broadcastPerformanceRankings();
 
@@ -3719,6 +4283,7 @@ function saveStorage() {
   Array.from(courtAssignments.values()).forEach((assignment) => saveCourtAssignment(assignment));
   Array.from(mcCourtStates.values()).forEach((state) => persistMcCourtState(state));
   Array.from(performanceCourtDisplays.values()).forEach((display) => persistPerformanceCourtDisplay(display));
+  storage.combatSchedules.forEach((item) => persistCombatSchedule(item));
   storage.performanceSchedules.forEach((group) => persistPerformanceScheduleGroup(group));
   storage.performanceRoutineBatches.forEach((batch) => persistPerformanceRoutineBatch(batch));
   storage.performanceResults.forEach((result) => persistPerformanceRankingResult(result));
@@ -3764,6 +4329,7 @@ function loadStorage() {
   });
 
   storage.importedAthleteBatches = readImportBatchesFromDatabase();
+  storage.combatSchedules = readCombatSchedulesFromDatabase();
   storage.performanceSchedules = readPerformanceSchedulesFromDatabase();
   storage.performanceRoutineBatches = readPerformanceRoutineBatchesFromDatabase();
   storage.performanceResults = readPerformanceRankingResultsFromDatabase();
@@ -3781,6 +4347,7 @@ function getMatch(matchId) {
         red: 0,
       },
       winner: null,
+      timer: createCombatTimer(),
       voteGroups: [],
       audit: [],
       createdAt: nowIso(),
@@ -3824,13 +4391,176 @@ function getPerformanceMatch(matchId, court = '') {
   return match;
 }
 
+function timerRemainingSec(timer, nowMs = Date.now()) {
+  if (!timer?.running || !timer.endsAt) return Math.max(0, Number(timer?.remainingSec || 0));
+  return Math.max(0, Math.ceil((new Date(timer.endsAt).getTime() - nowMs) / 1000));
+}
+
+function finishCombatMatchByTime(match) {
+  match.timer.running = false;
+  match.timer.endsAt = null;
+  match.timer.remainingSec = 0;
+
+  if (match.scores.blue === match.scores.red) {
+    match.timer.phase = 'tie';
+    match.status = 'running';
+    match.winner = null;
+    return null;
+  }
+
+  const side = match.scores.blue > match.scores.red ? 'blue' : 'red';
+  match.timer.phase = 'finished';
+  match.status = 'finished';
+  match.winner = {
+    side,
+    reason: 'Thắng khi hết thời gian',
+    decidedAt: nowIso(),
+  };
+  return match.winner;
+}
+
+function syncCombatTimer(match, nowMs = Date.now()) {
+  if (!match.timer) match.timer = createCombatTimer();
+  const timer = match.timer;
+  if (!timer.running || !timer.endsAt) return false;
+
+  let changed = false;
+  let endMs = new Date(timer.endsAt).getTime();
+  if (!Number.isFinite(endMs)) {
+    timer.running = false;
+    timer.endsAt = null;
+    return true;
+  }
+
+  while (timer.running && endMs <= nowMs) {
+    changed = true;
+    if (timer.phase === 'rest') {
+      timer.phase = 'round';
+      timer.currentRound += 1;
+      match.round = timer.currentRound;
+      timer.remainingSec = timer.config.roundDurationSec;
+      endMs += timer.remainingSec * 1000;
+      timer.endsAt = new Date(endMs).toISOString();
+      continue;
+    }
+
+    if (timer.phase === 'round' && timer.currentRound < timer.config.totalRounds) {
+      if (timer.config.restDurationSec > 0) {
+        timer.phase = 'rest';
+        timer.remainingSec = timer.config.restDurationSec;
+      } else {
+        timer.currentRound += 1;
+        match.round = timer.currentRound;
+        timer.remainingSec = timer.config.roundDurationSec;
+      }
+      endMs += timer.remainingSec * 1000;
+      timer.endsAt = new Date(endMs).toISOString();
+      continue;
+    }
+
+    if (
+      timer.phase === 'round'
+      && match.scores.blue === match.scores.red
+      && !timer.isExtraRound
+      && timer.config.extraRoundDurationSec > 0
+    ) {
+      timer.phase = 'extra_round';
+      timer.isExtraRound = true;
+      timer.currentRound = timer.config.totalRounds + 1;
+      match.round = timer.currentRound;
+      timer.remainingSec = timer.config.extraRoundDurationSec;
+      endMs += timer.remainingSec * 1000;
+      timer.endsAt = new Date(endMs).toISOString();
+      continue;
+    }
+
+    finishCombatMatchByTime(match);
+  }
+
+  if (timer.running) timer.remainingSec = timerRemainingSec(timer, nowMs);
+  if (changed) {
+    match.updatedAt = nowIso();
+    saveMatch(match);
+  }
+  return changed;
+}
+
+function publicCombatTimer(match) {
+  syncCombatTimer(match);
+  return {
+    ...match.timer,
+    config: { ...match.timer.config },
+    remainingSec: timerRemainingSec(match.timer),
+    serverNow: nowIso(),
+  };
+}
+
+function configureCombatTimer(matchId, payload) {
+  const match = getMatch(matchId);
+  if (match.timer?.running) {
+    return { statusCode: 409, payload: { error: 'Hãy tạm dừng đồng hồ trước khi đổi cài đặt.' } };
+  }
+  match.timer = createCombatTimer(payload);
+  match.round = 1;
+  match.status = 'running';
+  match.winner = null;
+  match.updatedAt = nowIso();
+  saveMatch(match);
+  const snapshot = publicMatch(match);
+  broadcast(matchId, 'timer', snapshot.timer);
+  broadcast(matchId, 'snapshot', snapshot);
+  return { statusCode: 200, payload: { match: snapshot } };
+}
+
+function controlCombatTimer(matchId, action) {
+  const match = getMatch(matchId);
+  syncCombatTimer(match);
+  const timer = match.timer;
+
+  if (action === 'reset') {
+    match.timer = createCombatTimer(timer.config);
+    match.round = 1;
+    match.status = 'running';
+    match.winner = null;
+  } else if (action === 'pause') {
+    timer.remainingSec = timerRemainingSec(timer);
+    timer.running = false;
+    timer.endsAt = null;
+  } else if (action === 'start' || action === 'resume') {
+    if (match.status === 'finished') {
+      return { statusCode: 409, payload: { error: 'Trận đã kết thúc.' } };
+    }
+    if (timer.phase === 'tie') {
+      return { statusCode: 409, payload: { error: 'Trận đang hòa sau hiệp phụ, cần quyết định kết quả trước.' } };
+    }
+    if (!timer.running) {
+      if (timer.phase === 'ready') timer.phase = 'round';
+      timer.running = true;
+      timer.endsAt = new Date(Date.now() + Math.max(1, timer.remainingSec) * 1000).toISOString();
+    }
+  } else {
+    return { statusCode: 400, payload: { error: 'action phải là start, resume, pause hoặc reset.' } };
+  }
+
+  match.updatedAt = nowIso();
+  saveMatch(match);
+  const snapshot = publicMatch(match);
+  broadcast(matchId, 'timer', snapshot.timer);
+  broadcast(matchId, 'snapshot', snapshot);
+  return { statusCode: 200, payload: { match: snapshot } };
+}
+
 function publicMatch(match) {
+  const court = inferCourtFromMatchId(match.matchId, 'combat');
+  const timer = publicCombatTimer(match);
   return {
     matchId: match.matchId,
     status: match.status,
     round: match.round,
     scores: match.scores,
     winner: match.winner,
+    timer,
+    combat: court ? publicCombatCourtDisplay(court) : null,
     config,
     pendingVoteGroups: match.voteGroups
       .filter((group) => !group.accepted && Date.now() - group.startedAt <= config.scoringWindowMs)
@@ -4493,6 +5223,12 @@ function checkTechnicalWin(match) {
     reason: `Technical win by ${config.technicalWinGap}-point gap`,
     decidedAt: nowIso(),
   };
+  if (match.timer) {
+    match.timer.phase = 'finished';
+    match.timer.running = false;
+    match.timer.endsAt = null;
+    match.timer.remainingSec = 0;
+  }
 
   return match.winner;
 }
@@ -4503,6 +5239,23 @@ function applyVote(vote) {
   if (conflict) return conflict;
 
   const match = getMatch(vote.matchId);
+  const activeCombat = court ? activeCombatScheduleForCourt(court) : null;
+  if (activeCombat && !isCombatScheduleReady(activeCombat)) {
+    return {
+      statusCode: 409,
+      payload: {
+        error: `Trận này chưa đủ VĐV: còn chờ ${combatWaitingReasons(activeCombat).join(', ')}.`,
+        match: publicMatch(match),
+      },
+    };
+  }
+  if (activeCombat && activeCombat.status === 'pending') {
+    updateCombatSchedule(activeCombat.scheduleId, {
+      status: 'in_progress',
+      startedAt: activeCombat.startedAt || nowIso(),
+    });
+    broadcast(vote.matchId, 'combatDisplay', publicCombatCourtDisplay(court));
+  }
 
   cleanupVoteGroups(match);
 
@@ -4594,9 +5347,21 @@ function applyPenalty(matchId, payload) {
   const match = getMatch(matchId);
   const parsed = validateSidePoint(payload);
   const judgeId = Number(payload.judgeId);
+  const court = inferCourtFromMatchId(matchId, 'combat');
+  const activeCombat = court ? activeCombatScheduleForCourt(court) : null;
 
   if (parsed.error) {
     return { statusCode: 400, payload: { error: parsed.error } };
+  }
+
+  if (activeCombat && !isCombatScheduleReady(activeCombat)) {
+    return {
+      statusCode: 409,
+      payload: {
+        error: `Trận này chưa đủ VĐV: còn chờ ${combatWaitingReasons(activeCombat).join(', ')}.`,
+        match: publicMatch(match),
+      },
+    };
   }
 
   if (judgeId !== 1) {
@@ -4639,6 +5404,7 @@ function applyPenalty(matchId, payload) {
 }
 
 function resetMatch(matchId) {
+  const previous = matches.get(matchId);
   const next = {
     matchId,
     status: 'running',
@@ -4648,6 +5414,7 @@ function resetMatch(matchId) {
       red: 0,
     },
     winner: null,
+    timer: createCombatTimer(previous?.timer?.config),
     voteGroups: [],
     audit: [{
       id: newId('audit'),
@@ -4959,6 +5726,8 @@ function serveStatic(res, pathname) {
     '/index.html': 'index.html',
     '/board.html': 'board.html',
     '/chief.html': 'chief.html',
+    '/combat-dispatch.html': 'combat-dispatch.html',
+    '/combat-import.html': 'combat-import.html',
     '/court.html': 'court.html',
     '/import.html': 'import.html',
     '/import-preview.html': 'import-preview.html',
@@ -5034,6 +5803,99 @@ async function handleApi(req, res, url) {
 
   if (method === 'GET' && pathname === '/api/performance/dispatch') {
     json(res, 200, buildPerformanceDispatchData());
+    return;
+  }
+
+  if (method === 'GET' && pathname === '/api/combat/dispatch') {
+    json(res, 200, buildCombatDispatchData());
+    return;
+  }
+
+  if (method === 'GET' && pathname === '/api/combat/schedules') {
+    json(res, 200, {
+      schedules: storage.combatSchedules.map(publicCombatScheduleItem),
+    });
+    return;
+  }
+
+  if (method === 'POST' && pathname === '/api/combat/import') {
+    try {
+      const body = await readBuffer(req);
+      const upload = parseMultipartFile(req.headers['content-type'], body);
+      const parsedFile = parseImportedFile(upload.filename, upload.buffer);
+      const parsedCombat = parseCombatSchedulesFromImportedFile(parsedFile);
+      const savedSchedules = saveCombatSchedules(parsedCombat.schedules);
+      Array.from({ length: COURT_COUNT }, (_, index) => String(index + 1)).forEach((court) => {
+        broadcast(defaultMatchIdForMode('combat', court), 'combatDisplay', publicCombatCourtDisplay(court));
+        broadcast(defaultMatchIdForMode('combat', court), 'snapshot', publicMatch(getMatch(defaultMatchIdForMode('combat', court))));
+      });
+      json(res, 200, {
+        saved: true,
+        fileName: parsedCombat.fileName,
+        sheetName: parsedCombat.sheetName,
+        totalMatches: savedSchedules.length,
+        schedules: savedSchedules.map(publicCombatScheduleItem),
+      });
+    } catch (error) {
+      badRequest(res, error.message || 'Could not import combat file');
+    }
+    return;
+  }
+
+  if (method === 'GET' && pathname.startsWith('/api/combat/courts/') && pathname.endsWith('/display')) {
+    const parts = pathname.split('/').filter(Boolean);
+    const court = decodeURIComponent(parts[3] || '');
+    const normalizedCourt = normalizeCourt(court);
+    if (!normalizedCourt) {
+      badRequest(res, `court must be 1-${COURT_COUNT}`);
+      return;
+    }
+    json(res, 200, publicCombatCourtDisplay(normalizedCourt));
+    return;
+  }
+
+  if (method === 'POST' && pathname.startsWith('/api/combat/courts/') && pathname.endsWith('/assign-schedule')) {
+    try {
+      const parts = pathname.split('/').filter(Boolean);
+      const court = decodeURIComponent(parts[3] || '');
+      const payload = await readJson(req);
+      const result = assignCombatSchedulesToCourt(
+        court,
+        Array.isArray(payload.scheduleIds) ? payload.scheduleIds : String(payload.scheduleId || '').trim(),
+      );
+      json(res, result.statusCode, result.payload);
+    } catch (error) {
+      badRequest(res, error.message || 'Invalid JSON');
+    }
+    return;
+  }
+
+  if (method === 'POST' && pathname.startsWith('/api/combat/courts/') && pathname.endsWith('/remove-schedule')) {
+    try {
+      const parts = pathname.split('/').filter(Boolean);
+      const court = decodeURIComponent(parts[3] || '');
+      const payload = await readJson(req);
+      const result = removeCombatScheduleFromCourt(court, String(payload.scheduleId || '').trim());
+      json(res, result.statusCode, result.payload);
+    } catch (error) {
+      badRequest(res, error.message || 'Invalid JSON');
+    }
+    return;
+  }
+
+  if (method === 'POST' && pathname.startsWith('/api/combat/courts/') && pathname.endsWith('/clear-schedule')) {
+    const parts = pathname.split('/').filter(Boolean);
+    const court = decodeURIComponent(parts[3] || '');
+    const result = clearCombatSchedulesFromCourt(court);
+    json(res, result.statusCode, result.payload);
+    return;
+  }
+
+  if (method === 'POST' && pathname.startsWith('/api/combat/courts/') && pathname.endsWith('/next')) {
+    const parts = pathname.split('/').filter(Boolean);
+    const court = decodeURIComponent(parts[3] || '');
+    const result = advanceCombatScheduleForCourt(court);
+    json(res, result.statusCode, result.payload);
     return;
   }
 
@@ -5439,6 +6301,46 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (method === 'GET' && pathname.startsWith('/api/matches/') && pathname.endsWith('/timer')) {
+    const parts = pathname.split('/');
+    const matchId = decodeURIComponent(parts[3] || 'MATCH_001');
+    const match = getMatch(matchId);
+    const changed = syncCombatTimer(match);
+    const snapshot = publicMatch(match);
+    if (changed) {
+      broadcast(matchId, 'timer', snapshot.timer);
+      broadcast(matchId, 'snapshot', snapshot);
+    }
+    json(res, 200, { match: snapshot });
+    return;
+  }
+
+  if (method === 'POST' && pathname.startsWith('/api/matches/') && pathname.endsWith('/timer/config')) {
+    try {
+      const parts = pathname.split('/');
+      const matchId = decodeURIComponent(parts[3] || 'MATCH_001');
+      const payload = await readJson(req);
+      const result = configureCombatTimer(matchId, payload);
+      json(res, result.statusCode, result.payload);
+    } catch (error) {
+      badRequest(res, error.message || 'Invalid JSON');
+    }
+    return;
+  }
+
+  if (method === 'POST' && pathname.startsWith('/api/matches/') && pathname.endsWith('/timer/control')) {
+    try {
+      const parts = pathname.split('/');
+      const matchId = decodeURIComponent(parts[3] || 'MATCH_001');
+      const payload = await readJson(req);
+      const result = controlCombatTimer(matchId, String(payload.action || '').trim());
+      json(res, result.statusCode, result.payload);
+    } catch (error) {
+      badRequest(res, error.message || 'Invalid JSON');
+    }
+    return;
+  }
+
   if (method === 'GET' && pathname.startsWith('/api/matches/')) {
     const matchId = decodeURIComponent(pathname.split('/').pop() || 'MATCH_001');
     json(res, 200, publicMatch(getMatch(matchId)));
@@ -5549,6 +6451,26 @@ try {
 } catch (error) {
   console.error(`Could not load storage: ${error.message}`);
 }
+
+setInterval(() => {
+  matches.forEach((match) => {
+    const previousWinner = match.winner?.side || '';
+    if (!syncCombatTimer(match)) return;
+    const snapshot = publicMatch(match);
+    broadcast(match.matchId, 'timer', snapshot.timer);
+    broadcast(match.matchId, 'snapshot', snapshot);
+    if (!previousWinner && match.winner) {
+      broadcast(match.matchId, 'matchFinished', {
+        id: newId('finish'),
+        type: 'matchFinished',
+        time: nowIso(),
+        matchId: match.matchId,
+        winner: match.winner,
+        scores: match.scores,
+      });
+    }
+  });
+}, 500);
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);

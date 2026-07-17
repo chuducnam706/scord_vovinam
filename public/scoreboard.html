@@ -32,6 +32,40 @@
         font-weight: 800;
       }
 
+      .match-meta {
+        margin-top: 4px;
+        color: #cbd5e1;
+        font-size: 17px;
+        font-weight: 800;
+      }
+
+      .header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .timer-display {
+        display: grid;
+        place-items: center;
+        min-width: 230px;
+      }
+
+      .timer-phase {
+        color: #fbbf24;
+        font-size: 18px;
+        font-weight: 900;
+      }
+
+      .timer-clock {
+        font-size: clamp(44px, 6vw, 76px);
+        font-weight: 900;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+
       .connection {
         padding: 8px 12px;
         border-radius: 8px;
@@ -64,8 +98,16 @@
 
       .name {
         text-align: center;
-        font-size: clamp(34px, 6vw, 72px);
+        font-size: clamp(30px, 5vw, 64px);
         font-weight: 900;
+      }
+
+      .unit {
+        margin-top: -8px;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.86);
+        font-size: clamp(18px, 2.4vw, 30px);
+        font-weight: 800;
       }
 
       .score {
@@ -100,28 +142,14 @@
         color: #111827;
       }
 
-      .footer {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 18px;
-        padding: 0 18px 18px;
+      .fighter.winner {
+        animation: winnerFlash 0.7s infinite alternate;
+        outline: 8px solid #facc15;
       }
 
-      .log {
-        min-height: 124px;
-        max-height: 180px;
-        overflow: auto;
-        padding: 14px;
-        border-radius: 8px;
-        background: #0f172a;
-        border: 1px solid #334155;
-        color: #cbd5e1;
-      }
-
-      .controls {
-        display: grid;
-        align-content: start;
-        gap: 10px;
+      @keyframes winnerFlash {
+        from { filter: brightness(1); }
+        to { filter: brightness(1.55); background: #facc15; color: #111827; }
       }
 
       button {
@@ -129,14 +157,20 @@
         min-height: 44px;
         border: 0;
         border-radius: 8px;
+        background: #2f7d4e;
+        color: #ffffff;
         font-size: 16px;
         font-weight: 700;
         cursor: pointer;
       }
 
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
       @media (max-width: 860px) {
-        main,
-        .footer {
+        main {
           grid-template-columns: 1fr;
         }
       }
@@ -147,13 +181,22 @@
       <div>
         <div class="title" id="matchTitle">Bảng điểm lớn</div>
         <div id="matchStatus">Đang tải...</div>
+        <div class="match-meta" id="matchMeta">--</div>
       </div>
-      <div class="connection" id="connection">Đang kết nối</div>
+      <div class="timer-display">
+        <div class="timer-phase" id="timerPhase">Sẵn sàng</div>
+        <div class="timer-clock" id="timerClock">02:00</div>
+      </div>
+      <div class="header-actions">
+        <button id="nextButton" type="button">Next trận</button>
+        <div class="connection" id="connection">Đang kết nối</div>
+      </div>
     </header>
 
     <main>
-      <section class="fighter blue">
-        <div class="name">XANH</div>
+      <section class="fighter blue" id="blueFighter">
+        <div class="name" id="blueName">XANH</div>
+        <div class="unit" id="blueUnit"></div>
         <div class="score" id="blueScore">0</div>
         <div class="judges">
           <div class="judge" id="blue-j1">1</div>
@@ -164,8 +207,9 @@
         </div>
       </section>
 
-      <section class="fighter red">
-        <div class="name">ĐỎ</div>
+      <section class="fighter red" id="redFighter">
+        <div class="name" id="redName">ĐỎ</div>
+        <div class="unit" id="redUnit"></div>
         <div class="score" id="redScore">0</div>
         <div class="judges">
           <div class="judge" id="red-j1">1</div>
@@ -177,37 +221,119 @@
       </section>
     </main>
 
-    <section class="footer">
-      <div class="log" id="log"></div>
-      <div class="controls">
-        <button id="resetButton">Reset trận</button>
-      </div>
-    </section>
-
     <script>
       const params = new URLSearchParams(window.location.search);
       const matchId = params.get('matchId') || 'MATCH_001';
+      const courtFromMatch = /^COURT_(\d+)$/.exec(matchId)?.[1] || '';
+      const court = params.get('court') || courtFromMatch || '1';
       const blueScore = document.getElementById('blueScore');
       const redScore = document.getElementById('redScore');
-      const logEl = document.getElementById('log');
+      const blueName = document.getElementById('blueName');
+      const blueUnit = document.getElementById('blueUnit');
+      const redName = document.getElementById('redName');
+      const redUnit = document.getElementById('redUnit');
       const connectionEl = document.getElementById('connection');
       const matchStatusEl = document.getElementById('matchStatus');
+      const matchTitleEl = document.getElementById('matchTitle');
+      const matchMetaEl = document.getElementById('matchMeta');
+      const nextButton = document.getElementById('nextButton');
+      const timerClock = document.getElementById('timerClock');
+      const timerPhase = document.getElementById('timerPhase');
+      const blueFighter = document.getElementById('blueFighter');
+      const redFighter = document.getElementById('redFighter');
+      let currentTimer = null;
 
-      document.getElementById('matchTitle').textContent = `Bảng điểm lớn - ${matchId}`;
+      matchTitleEl.textContent = `Bảng điểm lớn - ${matchId}`;
 
       function sideLabel(side) {
         return side === 'blue' ? 'Xanh' : 'Đỏ';
       }
 
-      function addLog(message) {
-        const row = document.createElement('div');
-        row.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-        logEl.prepend(row);
+      function addLog() {}
+
+      function combatStatusText(status) {
+        if (status === 'in_progress') return 'Đang diễn ra';
+        if (status === 'completed') return 'Đã kết thúc';
+        return 'Chưa diễn ra';
+      }
+
+      function updateNextButton(display) {
+        const current = display?.currentMatch;
+        if (!current) {
+          nextButton.disabled = true;
+          return;
+        }
+
+        const hasPendingNext = Boolean(display.nextMatch);
+        const canAdvanceCurrent = current.ready && current.status !== 'completed';
+        nextButton.disabled = !canAdvanceCurrent && !hasPendingNext;
+      }
+
+      function renderCombatInfo(display) {
+        const current = display?.currentMatch;
+        if (!current) {
+          blueName.textContent = 'XANH';
+          blueUnit.textContent = '';
+          redName.textContent = 'ĐỎ';
+          redUnit.textContent = '';
+          matchTitleEl.textContent = 'Chưa có trận đối kháng';
+          matchMetaEl.textContent = 'Hãy vào Chia sân đối kháng để gán trận vào sân này.';
+          updateNextButton(display);
+          return;
+        }
+        blueName.textContent = current.blueName || 'XANH';
+        blueUnit.textContent = current.blueResolved === false ? 'Đang chờ kết quả' : (current.blueUnit || '');
+        redName.textContent = current.redName || 'ĐỎ';
+        redUnit.textContent = current.redResolved === false ? 'Đang chờ kết quả' : (current.redUnit || '');
+        matchTitleEl.textContent = [
+          current.roundType || 'Trận',
+          current.weightClass || '',
+          current.groupName ? `Nhóm ${current.groupName}` : '',
+        ].filter(Boolean).join(' - ');
+        const waitingText = current.ready ? '' : ` • Còn chờ: ${(current.waitingReasons || []).join(', ')}`;
+        const orderText = Number.isInteger(Number(display.currentIndex)) && Number(display.currentIndex) >= 0
+          ? `Trận ${Number(display.currentIndex) + 1}/${display.totalMatches || '--'}`
+          : `Trận ${current.matchNo || current.orderNumber || '--'}`;
+        matchMetaEl.textContent = `${orderText} • ${combatStatusText(current.status)}${waitingText}`;
+        updateNextButton(display);
+      }
+
+      function formatSeconds(value) {
+        const seconds = Math.max(0, Math.ceil(Number(value) || 0));
+        return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+      }
+
+      function liveRemaining(timer) {
+        if (!timer?.running || !timer.endsAt) return timer?.remainingSec || 0;
+        return Math.max(0, (new Date(timer.endsAt).getTime() - Date.now()) / 1000);
+      }
+
+      function renderTimer(timer) {
+        if (!timer) return;
+        currentTimer = timer;
+        timerClock.textContent = formatSeconds(liveRemaining(timer));
+        const labels = {
+          ready: `Hiệp 1/${timer.config.totalRounds} - Sẵn sàng`,
+          round: `Hiệp ${timer.currentRound}/${timer.config.totalRounds}`,
+          rest: 'Nghỉ giữa hiệp',
+          extra_round: 'Hiệp phụ',
+          finished: 'Kết thúc trận',
+          tie: 'Hòa sau hiệp phụ',
+        };
+        timerPhase.textContent = labels[timer.phase] || 'Sẵn sàng';
+      }
+
+      function renderWinner(match) {
+        blueFighter.classList.toggle('winner', match.status === 'finished' && match.winner?.side === 'blue');
+        redFighter.classList.toggle('winner', match.status === 'finished' && match.winner?.side === 'red');
       }
 
       function updateSnapshot(match) {
         blueScore.textContent = match.scores.blue;
         redScore.textContent = match.scores.red;
+        if (match.combat) renderCombatInfo(match.combat);
+        if (match.timer) renderTimer(match.timer);
+        renderWinner(match);
 
         if (match.status === 'finished' && match.winner) {
           matchStatusEl.textContent = `Kết thúc: ${sideLabel(match.winner.side)} thắng`;
@@ -260,20 +386,61 @@
 
       events.addEventListener('matchFinished', (event) => {
         const data = JSON.parse(event.data);
+        renderWinner({ status: 'finished', winner: data.winner });
+        matchStatusEl.textContent = `Kết thúc: ${sideLabel(data.winner.side)} thắng`;
         addLog(`Kết thúc trận: ${sideLabel(data.winner.side)} thắng tuyệt đối`);
       });
 
       events.addEventListener('reset', (event) => {
         updateSnapshot(JSON.parse(event.data));
-        logEl.innerHTML = '';
         addLog('Đã reset trận');
       });
 
-      document.getElementById('resetButton').addEventListener('click', async () => {
-        await fetch(`/api/matches/${encodeURIComponent(matchId)}/reset`, {
-          method: 'POST',
-        });
+      events.addEventListener('combatDisplay', (event) => {
+        const display = JSON.parse(event.data);
+        renderCombatInfo(display);
       });
+
+      events.addEventListener('timer', (event) => {
+        renderTimer(JSON.parse(event.data));
+      });
+
+      nextButton.addEventListener('click', async () => {
+        nextButton.disabled = true;
+        connectionEl.textContent = 'Đang chuyển trận';
+
+        try {
+          const response = await fetch(`/api/combat/courts/${encodeURIComponent(court)}/next`, { method: 'POST' });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Không next được trận.');
+
+          if (data.match) updateSnapshot(data.match);
+          if (data.display) renderCombatInfo(data.display);
+          connectionEl.textContent = data.display?.currentMatch ? 'Đã chuyển trận' : 'Đã hết trận';
+        } catch (error) {
+          connectionEl.textContent = error.message;
+          loadCombatDisplay().catch(() => {});
+        }
+      });
+
+      async function loadCombatDisplay() {
+        const response = await fetch(`/api/combat/courts/${encodeURIComponent(court)}/display`);
+        const data = await response.json();
+        renderCombatInfo(data);
+      }
+
+      loadCombatDisplay().catch(() => {
+        nextButton.disabled = true;
+      });
+
+      window.setInterval(() => {
+        if (currentTimer) timerClock.textContent = formatSeconds(liveRemaining(currentTimer));
+      }, 250);
+
+      fetch(`/api/matches/${encodeURIComponent(matchId)}/timer`)
+        .then((response) => response.json())
+        .then((data) => data.match && updateSnapshot(data.match))
+        .catch(() => {});
     </script>
   </body>
 </html>

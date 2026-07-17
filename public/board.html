@@ -35,6 +35,13 @@
         color: #94a3b8;
       }
 
+      .match-meta {
+        margin-top: 4px;
+        color: #cbd5e1;
+        font-size: 16px;
+        font-weight: 800;
+      }
+
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -42,16 +49,29 @@
         gap: 10px;
       }
 
-      a {
+      a,
+      button {
         display: grid;
         place-items: center;
         min-height: 42px;
         padding: 0 14px;
+        border: 0;
         border-radius: 8px;
         background: #2563eb;
         color: #ffffff;
+        font: inherit;
         font-weight: 800;
         text-decoration: none;
+        cursor: pointer;
+      }
+
+      button.success {
+        background: #2f7d4e;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
       }
 
       .connection {
@@ -69,6 +89,92 @@
         grid-template-columns: 1fr 1fr;
         gap: 16px;
         padding: 16px;
+      }
+
+      .timer-panel {
+        margin: 16px 16px 0;
+        padding: 14px 16px;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        background: #0f172a;
+      }
+
+      .timer-top {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+
+      .phase-label {
+        min-width: 160px;
+        color: #fbbf24;
+        font-size: 22px;
+        font-weight: 900;
+        text-align: center;
+      }
+
+      .timer-clock {
+        min-width: 190px;
+        font-size: clamp(48px, 8vw, 82px);
+        font-weight: 900;
+        line-height: 1;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .timer-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .timer-actions .secondary,
+      details button.secondary {
+        background: #475569;
+      }
+
+      details {
+        margin-top: 12px;
+        border-top: 1px solid #334155;
+        padding-top: 12px;
+      }
+
+      summary {
+        cursor: pointer;
+        color: #cbd5e1;
+        font-weight: 800;
+      }
+
+      .settings-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(150px, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: #cbd5e1;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      input {
+        min-height: 42px;
+        padding: 8px 10px;
+        border: 1px solid #475569;
+        border-radius: 8px;
+        background: #020617;
+        color: #fff;
+        font: inherit;
+      }
+
+      .settings-footer {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 10px;
       }
 
       .fighter {
@@ -89,8 +195,16 @@
 
       .name {
         text-align: center;
-        font-size: clamp(34px, 7vw, 72px);
+        font-size: clamp(28px, 5vw, 58px);
         font-weight: 900;
+      }
+
+      .unit {
+        margin-top: -8px;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.86);
+        font-size: clamp(16px, 2.6vw, 28px);
+        font-weight: 800;
       }
 
       .score {
@@ -126,10 +240,24 @@
         opacity: 1;
       }
 
+      .fighter.winner {
+        animation: winnerFlash 0.7s infinite alternate;
+        outline: 7px solid #facc15;
+      }
+
+      @keyframes winnerFlash {
+        from { filter: brightness(1); }
+        to { filter: brightness(1.55); background: #facc15; color: #111827; }
+      }
+
       @media (max-width: 760px) {
         header,
         main {
           grid-template-columns: 1fr;
+        }
+
+        .settings-grid {
+          grid-template-columns: 1fr 1fr;
         }
       }
     </style>
@@ -139,22 +267,47 @@
       <div>
         <h1 id="title">Bảng điểm</h1>
         <div class="muted" id="subtitle">Đang tải...</div>
+        <div class="match-meta" id="matchMeta">--</div>
       </div>
       <div class="actions">
         <a id="largeLink" href="#">Bảng điểm lớn</a>
+        <button class="success" id="nextButton" type="button">Next trận</button>
         <div class="connection" id="connection">Đang kết nối</div>
       </div>
     </header>
 
+    <section class="timer-panel">
+      <div class="timer-top">
+        <div class="phase-label" id="phaseLabel">Sẵn sàng</div>
+        <div class="timer-clock" id="timerClock">02:00</div>
+        <div class="timer-actions">
+          <button class="success" id="timerToggle" type="button">Bắt đầu</button>
+          <button class="secondary" id="timerReset" type="button">Đặt lại giờ</button>
+        </div>
+      </div>
+      <details>
+        <summary>Cài đặt trận đấu đối kháng</summary>
+        <div class="settings-grid">
+          <label>Thời gian mỗi hiệp (giây)<input id="roundDuration" type="number" min="10" max="3600" value="120" /></label>
+          <label>Số hiệp đấu<input id="totalRounds" type="number" min="1" max="10" value="2" /></label>
+          <label>Thời gian hiệp phụ (giây)<input id="extraDuration" type="number" min="0" max="3600" value="120" /></label>
+          <label>Nghỉ giữa hiệp (giây)<input id="restDuration" type="number" min="0" max="1800" value="60" /></label>
+        </div>
+        <div class="settings-footer"><button id="applyTimerConfig" type="button">Áp dụng cài đặt</button></div>
+      </details>
+    </section>
+
     <main>
-      <section class="fighter blue">
-        <div class="name">XANH</div>
+      <section class="fighter blue" id="blueFighter">
+        <div class="name" id="blueName">XANH</div>
+        <div class="unit" id="blueUnit"></div>
         <div class="score" id="blueScore">0</div>
         <div class="judges" id="blueJudges"></div>
       </section>
 
-      <section class="fighter red">
-        <div class="name">ĐỎ</div>
+      <section class="fighter red" id="redFighter">
+        <div class="name" id="redName">ĐỎ</div>
+        <div class="unit" id="redUnit"></div>
         <div class="score" id="redScore">0</div>
         <div class="judges" id="redJudges"></div>
       </section>
@@ -166,13 +319,110 @@
       const matchId = params.get('matchId') || `COURT_${court}`;
       const blueScore = document.getElementById('blueScore');
       const redScore = document.getElementById('redScore');
+      const blueName = document.getElementById('blueName');
+      const blueUnit = document.getElementById('blueUnit');
+      const redName = document.getElementById('redName');
+      const redUnit = document.getElementById('redUnit');
       const blueJudges = document.getElementById('blueJudges');
       const redJudges = document.getElementById('redJudges');
       const connection = document.getElementById('connection');
+      const subtitle = document.getElementById('subtitle');
+      const matchMeta = document.getElementById('matchMeta');
+      const nextButton = document.getElementById('nextButton');
+      const timerClock = document.getElementById('timerClock');
+      const phaseLabel = document.getElementById('phaseLabel');
+      const timerToggle = document.getElementById('timerToggle');
+      const timerReset = document.getElementById('timerReset');
+      const blueFighter = document.getElementById('blueFighter');
+      const redFighter = document.getElementById('redFighter');
+      let currentTimer = null;
 
       document.getElementById('title').textContent = `Bảng điểm - Sân ${court}`;
-      document.getElementById('subtitle').textContent = `Mã trận: ${matchId}`;
+      subtitle.textContent = `Mã trận: ${matchId}`;
       document.getElementById('largeLink').href = `/scoreboard.html?matchId=${encodeURIComponent(matchId)}`;
+
+      function statusText(status) {
+        if (status === 'in_progress') return 'Đang diễn ra';
+        if (status === 'completed') return 'Đã kết thúc';
+        return 'Chưa diễn ra';
+      }
+
+      function updateNextButton(display) {
+        const current = display?.currentMatch;
+        if (!current) {
+          nextButton.disabled = true;
+          return;
+        }
+
+        const hasPendingNext = Boolean(display.nextMatch);
+        const canAdvanceCurrent = current.ready && current.status !== 'completed';
+        nextButton.disabled = !canAdvanceCurrent && !hasPendingNext;
+      }
+
+      function renderCombatInfo(display) {
+        const current = display?.currentMatch;
+        if (!current) {
+          blueName.textContent = 'XANH';
+          blueUnit.textContent = '';
+          redName.textContent = 'ĐỎ';
+          redUnit.textContent = '';
+          subtitle.textContent = 'Chưa có trận đối kháng';
+          matchMeta.textContent = 'Hãy vào Chia sân đối kháng để gán trận vào sân này.';
+          updateNextButton(display);
+          return;
+        }
+        blueName.textContent = current.blueName || 'XANH';
+        blueUnit.textContent = current.blueResolved === false ? 'Đang chờ kết quả' : (current.blueUnit || '');
+        redName.textContent = current.redName || 'ĐỎ';
+        redUnit.textContent = current.redResolved === false ? 'Đang chờ kết quả' : (current.redUnit || '');
+        subtitle.textContent = [
+          current.roundType || 'Trận',
+          current.weightClass || '',
+          current.groupName ? `Nhóm ${current.groupName}` : '',
+        ].filter(Boolean).join(' - ');
+        const waitingText = current.ready ? '' : ` • Còn chờ: ${(current.waitingReasons || []).join(', ')}`;
+        const orderText = Number.isInteger(Number(display.currentIndex)) && Number(display.currentIndex) >= 0
+          ? `Trận ${Number(display.currentIndex) + 1}/${display.totalMatches || '--'}`
+          : `Trận ${current.matchNo || current.orderNumber || '--'}`;
+        matchMeta.textContent = `${orderText} • ${statusText(current.status)}${waitingText}`;
+        updateNextButton(display);
+      }
+
+      function formatSeconds(value) {
+        const seconds = Math.max(0, Math.ceil(Number(value) || 0));
+        return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+      }
+
+      function liveRemaining(timer) {
+        if (!timer?.running || !timer.endsAt) return timer?.remainingSec || 0;
+        return Math.max(0, (new Date(timer.endsAt).getTime() - Date.now()) / 1000);
+      }
+
+      function renderTimer(timer) {
+        if (!timer) return;
+        currentTimer = timer;
+        timerClock.textContent = formatSeconds(liveRemaining(timer));
+        const labels = {
+          ready: `Hiệp 1/${timer.config.totalRounds} - Sẵn sàng`,
+          round: `Hiệp ${timer.currentRound}/${timer.config.totalRounds}`,
+          rest: `Nghỉ giữa hiệp`,
+          extra_round: 'Hiệp phụ',
+          finished: 'Kết thúc trận',
+          tie: 'Hòa sau hiệp phụ',
+        };
+        phaseLabel.textContent = labels[timer.phase] || 'Sẵn sàng';
+        timerToggle.textContent = timer.running ? 'Tạm dừng' : (timer.phase === 'ready' ? 'Bắt đầu' : 'Chạy tiếp');
+        timerToggle.disabled = timer.phase === 'finished' || timer.phase === 'tie';
+        document.getElementById('roundDuration').value = timer.config.roundDurationSec;
+        document.getElementById('totalRounds').value = timer.config.totalRounds;
+        document.getElementById('extraDuration').value = timer.config.extraRoundDurationSec;
+        document.getElementById('restDuration').value = timer.config.restDurationSec;
+      }
+
+      function renderWinner(match) {
+        blueFighter.classList.toggle('winner', match.status === 'finished' && match.winner?.side === 'blue');
+        redFighter.classList.toggle('winner', match.status === 'finished' && match.winner?.side === 'red');
+      }
 
       function renderJudges() {
         blueJudges.innerHTML = '';
@@ -195,7 +445,21 @@
       function updateSnapshot(match) {
         blueScore.textContent = match.scores.blue;
         redScore.textContent = match.scores.red;
+        renderCombatInfo(match.combat);
+        if (match.timer) renderTimer(match.timer);
+        renderWinner(match);
         renderJudges();
+      }
+
+      async function timerRequest(path, body) {
+        const response = await fetch(`/api/matches/${encodeURIComponent(matchId)}/timer/${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Không điều khiển được đồng hồ.');
+        if (data.match) updateSnapshot(data.match);
       }
 
       function flashJudge(side, judgeId) {
@@ -242,6 +506,90 @@
       events.addEventListener('reset', (event) => {
         updateSnapshot(JSON.parse(event.data));
       });
+
+      events.addEventListener('combatDisplay', (event) => {
+        const display = JSON.parse(event.data);
+        renderCombatInfo(display);
+      });
+
+      events.addEventListener('timer', (event) => {
+        renderTimer(JSON.parse(event.data));
+      });
+
+      events.addEventListener('matchFinished', (event) => {
+        const data = JSON.parse(event.data);
+        renderWinner({ status: 'finished', winner: data.winner });
+      });
+
+      timerToggle.addEventListener('click', async () => {
+        timerToggle.disabled = true;
+        try {
+          await timerRequest('control', { action: currentTimer?.running ? 'pause' : 'start' });
+        } catch (error) {
+          connection.textContent = error.message;
+        } finally {
+          timerToggle.disabled = false;
+        }
+      });
+
+      timerReset.addEventListener('click', async () => {
+        try {
+          await timerRequest('control', { action: 'reset' });
+        } catch (error) {
+          connection.textContent = error.message;
+        }
+      });
+
+      document.getElementById('applyTimerConfig').addEventListener('click', async () => {
+        try {
+          await timerRequest('config', {
+            roundDurationSec: document.getElementById('roundDuration').value,
+            totalRounds: document.getElementById('totalRounds').value,
+            extraRoundDurationSec: document.getElementById('extraDuration').value,
+            restDurationSec: document.getElementById('restDuration').value,
+          });
+          connection.textContent = 'Đã áp dụng cài đặt';
+        } catch (error) {
+          connection.textContent = error.message;
+        }
+      });
+
+      nextButton.addEventListener('click', async () => {
+        nextButton.disabled = true;
+        connection.textContent = 'Đang chuyển trận';
+
+        try {
+          const response = await fetch(`/api/combat/courts/${encodeURIComponent(court)}/next`, { method: 'POST' });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Không next được trận.');
+
+          if (data.match) updateSnapshot(data.match);
+          if (data.display) renderCombatInfo(data.display);
+          connection.textContent = data.display?.currentMatch ? 'Đã chuyển trận' : 'Đã hết trận';
+        } catch (error) {
+          connection.textContent = error.message;
+          loadCombatDisplay().catch(() => {});
+        }
+      });
+
+      async function loadCombatDisplay() {
+        const response = await fetch(`/api/combat/courts/${encodeURIComponent(court)}/display`);
+        const data = await response.json();
+        renderCombatInfo(data);
+      }
+
+      loadCombatDisplay().catch(() => {
+        nextButton.disabled = true;
+      });
+
+      window.setInterval(() => {
+        if (currentTimer) timerClock.textContent = formatSeconds(liveRemaining(currentTimer));
+      }, 250);
+
+      fetch(`/api/matches/${encodeURIComponent(matchId)}/timer`)
+        .then((response) => response.json())
+        .then((data) => data.match && updateSnapshot(data.match))
+        .catch(() => {});
     </script>
   </body>
 </html>

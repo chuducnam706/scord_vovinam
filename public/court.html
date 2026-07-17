@@ -86,19 +86,6 @@
         cursor: pointer;
       }
 
-      a.secondary {
-        background: #334155;
-      }
-
-      .flow {
-        display: grid;
-        gap: 10px;
-        margin-top: 14px;
-        color: #94a3b8;
-        font-size: 15px;
-        line-height: 1.45;
-      }
-
       @media (max-width: 760px) {
         header,
         main {
@@ -152,9 +139,27 @@
         }
       }
 
+      function renderCombatDisplay(display) {
+        const current = display.currentMatch;
+        if (!current) {
+          setStatus('Chưa có trận');
+          return;
+        }
+        const statusText = current.status === 'in_progress' ? 'Đang diễn ra' : current.status === 'completed' ? 'Đã kết thúc' : 'Chưa diễn ra';
+        const waitingText = current.ready ? '' : ` • Còn chờ: ${(current.waitingReasons || []).join(', ')}`;
+        setStatus(`Trận ${display.currentIndex + 1}/${display.totalMatches} • ${statusText}${waitingText}`);
+      }
+
+      async function loadCombatDisplay() {
+        const response = await fetch(`/api/combat/courts/${encodeURIComponent(court)}/display`);
+        const data = await response.json();
+        renderCombatDisplay(data);
+      }
+
       function loadCourt() {
         renderJudgeLinks();
         setStatus('Sẵn sàng');
+        loadCombatDisplay().catch((error) => setStatus(error.message));
       }
 
       loadCourt();
